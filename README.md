@@ -52,3 +52,4 @@
 1. 開啟 `style.css` 檔案。
 2. 找到 `#content-element` 的 CSS 規則。
 3. 將 `object-fit` 的值修改為 `contain` 或 `cover` 即可。
+ 
