@@ -248,3 +248,25 @@ html, body {
 .log-line.cache {
     color: #66d9ef;
 }
+
+#debug-ui-container {
+  display: none; /* 預設隱藏 */
+}
+
+#debug-mode-toggle {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1001;
+  padding: 10px 15px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+#debug-mode-toggle:hover {
+  background-color: #5a6268;
+}
