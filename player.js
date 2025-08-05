@@ -83,6 +83,7 @@ class AdPlayer {
 
         // 曝光率相關
         this.adStartTimestamps = []; // 儲存廣告開始播放的時間戳
+        this.tenMinuteExposureHistory = []; // 儲存十分鐘區間的曝光歷史
         this.exposureDisplayElement = null; // 顯示曝光率的 DOM 元素
         this.playRequestDisplayElement = null; // 顯示總播放/請求次數的 DOM 元素
         this.totalPlayCount = 0; // 總播放次數
@@ -343,8 +344,33 @@ class AdPlayer {
             this.showNotification(message);
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
-        this.adStartTimestamps.push(Date.now()); // 記錄廣告開始播放的時間
         this.totalPlayCount++; // 增加總播放次數
+
+        // 更新十分鐘曝光歷史
+        const now = new Date();
+        const currentMinute = now.getMinutes();
+        const currentHour = now.getHours();
+        const tenMinuteInterval = Math.floor(currentMinute / 10);
+        const key = `${currentHour.toString().padStart(2, '0')}:${(tenMinuteInterval * 10).toString().padStart(2, '0')}`;
+
+        let found = false;
+        for (let i = 0; i < this.tenMinuteExposureHistory.length; i++) {
+            if (this.tenMinuteExposureHistory[i].key === key) {
+                this.tenMinuteExposureHistory[i].count++;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            this.tenMinuteExposureHistory.push({ key: key, count: 1, timestamp: now.getTime() });
+        }
+
+        // 保持最多三個區間的歷史記錄
+        this.tenMinuteExposureHistory.sort((a, b) => b.timestamp - a.timestamp);
+        if (this.tenMinuteExposureHistory.length > 3) {
+            this.tenMinuteExposureHistory = this.tenMinuteExposureHistory.slice(0, 3);
+        }
+
         this.updateExposureDisplay(); // 更新曝光率顯示
         this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
         this.checkMediaCacheUsage(); // 檢查媒體快取使用情況
@@ -573,26 +599,22 @@ class AdPlayer {
     }
 
     /**
-     * 計算近一小時的廣告曝光次數
-     * @returns {number} 近一小時的廣告曝光次數
-     */
-    calculateHourlyExposure() {
-        const now = Date.now();
-        const tenMinutesAgo = now - (10 * 60 * 1000); // 十分鐘前的時間戳
-
-        // 移除超過十分鐘的舊時間戳
-        this.adStartTimestamps = this.adStartTimestamps.filter(timestamp => timestamp >= tenMinutesAgo);
-
-        return this.adStartTimestamps.length;
-    }
-
-    /**
-     * 更新畫面上的曝光率顯示
+     * 更新畫面上的曝光率顯示 (最近三個十分鐘區間)
      */
     updateExposureDisplay() {
         if (this.exposureDisplayElement) {
-            const exposureCount = this.calculateHourlyExposure();
-            this.exposureDisplayElement.textContent = `近十分鐘曝光: ${exposureCount} 次`;
+            let displayContent = "";
+            if (this.tenMinuteExposureHistory.length === 0) {
+                displayContent = "近十分鐘曝光: 0 次"; // Default message if no data
+            } else {
+                // Sort by timestamp descending and take the top 3
+                const sortedHistory = [...this.tenMinuteExposureHistory].sort((a, b) => b.timestamp - a.timestamp);
+                for (let i = 0; i < Math.min(sortedHistory.length, 3); i++) {
+                    const item = sortedHistory[i];
+                    displayContent += `${item.key} - ${item.count} 次\n`;
+                }
+            }
+            this.exposureDisplayElement.textContent = displayContent.trim();
         }
     }
 
