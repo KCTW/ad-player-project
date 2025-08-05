@@ -28,15 +28,11 @@ html, body {
 #notification-container {
   position: absolute;
   top: 20px;
-  left: 50%; /* 水平居中 */
-  transform: translateX(-50%); /* 水平居中 */
+  left: 20px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 30%; /* 限制最大高度為螢幕的 30% */
-  overflow-y: auto; /* 超出時顯示垂直滾動條 */
-  padding-right: 10px; /* 為滾動條留出空間 */
 }
 
 .notification {
@@ -101,7 +97,7 @@ html, body {
 #controls-container {
   position: absolute;
   bottom: 20px;
-  left: 20px;
+  right: 20px; /* 改為右邊 */
   display: flex;
   flex-direction: row; /* 讓兩個容器並排 */
   gap: 20px; /* 兩個容器之間的間距 */
