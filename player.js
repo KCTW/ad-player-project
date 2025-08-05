@@ -91,12 +91,14 @@ class AdPlayer {
         this.selectedEndpoints = []; // 用於儲存使用者選擇的 Endpoint 名稱
         this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
         this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
+        this.logAllEvents = false; // 是否記錄所有日誌事件
 
         // 異步載入設定
         this.loadSettings().then(() => {
             // 設定載入完成後，渲染 UI
             this.renderEndpointSelection();
             this.renderDeviceIdInput();
+            this.renderLogToggle(); // 渲染日誌開關
         });
     }
 
@@ -111,12 +113,14 @@ class AdPlayer {
      * @param {boolean} isError - 是否為錯誤訊息
      */
     showNotification(message, isError = false, isCache = false) {
-        const logData = {
-            level: isError ? 'error' : 'info',
-            message: message,
-            timestamp: new Date().toISOString()
-        };
-        saveLog(logData);
+        if (isError || this.logAllEvents) {
+            const logData = {
+                level: isError ? 'error' : (isCache ? 'cache' : 'info'),
+                message: message,
+                timestamp: new Date().toISOString()
+            };
+            saveLog(logData);
+        }
 
         console.log(message); // 仍然在 console 中保留日誌
         const notification = document.createElement('div');
@@ -182,6 +186,8 @@ class AdPlayer {
         this.playRequestDisplayElement = document.getElementById('play-request-counts');
         this.updateExposureDisplay(); // 初始化曝光率顯示
         this.updatePlayRequestDisplay(); // 初始化總播放/請求次數顯示
+
+        window.addEventListener('orientationchange', () => this.onOrientationChange());
     }
 
     /**
@@ -631,6 +637,33 @@ class AdPlayer {
         container.appendChild(input);
     }
 
+    renderLogToggle() {
+        const container = document.getElementById('log-toggle-container');
+        if (!container) return;
+
+        container.innerHTML = ''; // 清空現有內容
+
+        const title = document.createElement('div');
+        title.textContent = '日誌記錄模式:';
+        title.style.fontWeight = 'bold';
+        title.style.marginBottom = '5px';
+        container.appendChild(title);
+
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = this.logAllEvents;
+
+        checkbox.addEventListener('change', (event) => {
+            this.logAllEvents = event.target.checked;
+            this.showNotification(`已切換為 ${this.logAllEvents ? '全部記錄' : '只記錄錯誤'} 模式`);
+        });
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode('記錄所有事件'));
+        container.appendChild(label);
+    }
+
     /**
      * 更新畫面上的曝光率顯示 (最近三個十分鐘區間)
      */
@@ -657,6 +690,15 @@ class AdPlayer {
     updatePlayRequestDisplay() {
         if (this.playRequestDisplayElement) {
             this.playRequestDisplayElement.textContent = `總播放/請求: ${this.totalPlayCount} / ${this.totalRequestCount}`;
+        }
+    }
+
+    onOrientationChange() {
+        if (this.adsManager) {
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            this.adsManager.resize(screenWidth, screenHeight, google.ima.ViewMode.FULLSCREEN);
+            this.showNotification(`偵測到畫面旋轉，調整廣告尺寸為 ${screenWidth}x${screenHeight}`);
         }
     }
 }
@@ -764,9 +806,18 @@ window.addEventListener('load', () => {
     showLogsButton.addEventListener('click', async () => {
         try {
             const logs = await getLogs(200); // 取得最近 200 筆日誌
-            logContent.textContent = logs.map(log => {
-                return `[${new Date(log.timestamp).toLocaleString()}] [${log.level.toUpperCase()}] ${log.message}`;
-            }).join('\n');
+            logContent.innerHTML = ''; // 清空現有內容
+            logs.forEach(log => {
+                const logLine = document.createElement('div');
+                logLine.className = `log-line ${log.level}`;
+                logLine.textContent = `[${new Date(log.timestamp).toLocaleString()}] ${log.message}`;
+                if (log.details) {
+                    const details = document.createElement('pre');
+                    details.textContent = JSON.stringify(log.details, null, 2);
+                    logLine.appendChild(details);
+                }
+                logContent.appendChild(logLine);
+            });
             logViewerContainer.style.display = 'flex';
         } catch (error) {
             console.error('Failed to show logs:', error);
