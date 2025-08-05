@@ -28,11 +28,15 @@ html, body {
 #notification-container {
   position: absolute;
   top: 20px;
-  left: 20px;
+  left: 50%; /* 水平居中 */
+  transform: translateX(-50%); /* 水平居中 */
   z-index: 1000;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 30%; /* 限制最大高度為螢幕的 30% */
+  overflow-y: auto; /* 超出時顯示垂直滾動條 */
+  padding-right: 10px; /* 為滾動條留出空間 */
 }
 
 .notification {
