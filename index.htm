@@ -10,16 +10,18 @@
   <div id="ad-container">
     <video id="content-element" muted playsinline></video>
   </div>
-  <div id="notification-container"></div>
-  <div id="top-right-info">
-    <div id="exposure-rate"></div>
-    <div id="play-request-counts"></div>
-  </div>
-  <div id="controls-container">
-    <div id="endpoint-selection-container"></div>
-    <div id="device-id-input-container"></div>
-    <div id="log-toggle-container"></div>
-    <button id="show-logs-button">顯示日誌</button>
+  <div id="debug-ui-container">
+    <div id="notification-container"></div>
+    <div id="top-right-info">
+      <div id="exposure-rate"></div>
+      <div id="play-request-counts"></div>
+    </div>
+    <div id="controls-container">
+      <div id="endpoint-selection-container"></div>
+      <div id="device-id-input-container"></div>
+      <div id="log-toggle-container"></div>
+      <button id="show-logs-button">顯示日誌</button>
+    </div>
   </div>
 
   <div id="log-viewer-container" style="display: none;">
@@ -32,6 +34,8 @@
     </div>
     <pre id="log-content"></pre>
   </div>
+
+  <button id="debug-mode-toggle">除錯模式</button>
 
   <script src="player.js"></script>
 </body>

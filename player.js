@@ -92,6 +92,7 @@ class AdPlayer {
         this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
         this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
         this.logAllEvents = false; // 是否記錄所有日誌事件
+        this.debugMode = false; // 除錯模式開關
 
         // 異步載入設定
         this.loadSettings().then(() => {
@@ -99,12 +100,15 @@ class AdPlayer {
             this.renderEndpointSelection();
             this.renderDeviceIdInput();
             this.renderLogToggle(); // 渲染日誌開關
+            this.setupDebugModeToggle(); // 設定除錯模式開關
+            this.toggleDebugUI(this.debugMode); // 根據儲存的狀態初始化 UI
         });
     }
 
     async loadSettings() {
         this.selectedEndpoints = (await loadSetting('selectedEndpoints')) || [];
         this.customDeviceId = (await loadSetting('customDeviceId')) || '';
+        this.debugMode = (await loadSetting('debugMode')) || false;
     }
 
     /**
@@ -662,6 +666,28 @@ class AdPlayer {
         label.appendChild(checkbox);
         label.appendChild(document.createTextNode('記錄所有事件'));
         container.appendChild(label);
+    }
+
+    toggleDebugUI(show) {
+        const debugUIContainer = document.getElementById('debug-ui-container');
+        if (debugUIContainer) {
+            debugUIContainer.style.display = show ? 'block' : 'none';
+        }
+    }
+
+    setupDebugModeToggle() {
+        const debugModeToggle = document.getElementById('debug-mode-toggle');
+        if (!debugModeToggle) return;
+
+        debugModeToggle.textContent = this.debugMode ? '關閉除錯模式' : '開啟除錯模式';
+
+        debugModeToggle.addEventListener('click', async () => {
+            this.debugMode = !this.debugMode;
+            await saveSetting('debugMode', this.debugMode);
+            this.toggleDebugUI(this.debugMode);
+            debugModeToggle.textContent = this.debugMode ? '關閉除錯模式' : '開啟除錯模式';
+            this.showNotification(`除錯模式已${this.debugMode ? '開啟' : '關閉'}`);
+        });
     }
 
     /**
