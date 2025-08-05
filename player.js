@@ -578,10 +578,10 @@ class AdPlayer {
      */
     calculateHourlyExposure() {
         const now = Date.now();
-        const oneHourAgo = now - (60 * 60 * 1000); // 一小時前的時間戳
+        const tenMinutesAgo = now - (10 * 60 * 1000); // 十分鐘前的時間戳
 
-        // 移除超過一小時的舊時間戳
-        this.adStartTimestamps = this.adStartTimestamps.filter(timestamp => timestamp >= oneHourAgo);
+        // 移除超過十分鐘的舊時間戳
+        this.adStartTimestamps = this.adStartTimestamps.filter(timestamp => timestamp >= tenMinutesAgo);
 
         return this.adStartTimestamps.length;
     }
@@ -592,7 +592,7 @@ class AdPlayer {
     updateExposureDisplay() {
         if (this.exposureDisplayElement) {
             const exposureCount = this.calculateHourlyExposure();
-            this.exposureDisplayElement.textContent = `近一小時曝光: ${exposureCount} 次`;
+            this.exposureDisplayElement.textContent = `近十分鐘曝光: ${exposureCount} 次`;
         }
     }
 
