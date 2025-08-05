@@ -57,6 +57,8 @@ html, body {
   background-color: rgba(255, 0, 0, 0.6); /* 增加通透度 */
   color: #fff;
 }
+<<<<<<< HEAD
+=======
 
 .notification.cache-info {
   background-color: rgba(100, 149, 237, 0.6); /* 淺藍色背景 */
@@ -141,3 +143,4 @@ html, body {
   background-color: #333;
   color: #fff;
 }
+>>>>>>> master
