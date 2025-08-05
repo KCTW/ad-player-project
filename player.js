@@ -409,7 +409,7 @@ class AdPlayer {
                         }
                     }
 
-                    this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
+                    this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)} (類型: ${resource.initiatorType}): ${cacheStatus}`, false, true);
                     this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
                 });
             } else {
