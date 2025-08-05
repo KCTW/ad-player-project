@@ -757,12 +757,35 @@ async function loadSetting(key) {
     });
 }
 
+const LOG_LIMIT = 5000; // 日誌數量上限
+
 async function saveLog(logData) {
     try {
         const db = await openDatabase();
         const transaction = db.transaction([LOG_STORE_NAME], 'readwrite');
         const store = transaction.objectStore(LOG_STORE_NAME);
-        store.add({ ...logData, timestamp: new Date() });
+        store.add({ ...logData, timestamp: new Date().toISOString() });
+
+        // 自動修剪日誌
+        const countRequest = store.count();
+        countRequest.onsuccess = () => {
+            if (countRequest.result > LOG_LIMIT) {
+                const deleteTransaction = db.transaction([LOG_STORE_NAME], 'readwrite');
+                const deleteStore = deleteTransaction.objectStore(LOG_STORE_NAME);
+                const index = deleteStore.index('timestamp');
+                const oldestLogsRequest = index.openCursor(null, 'next');
+                let logsToDelete = countRequest.result - LOG_LIMIT;
+
+                oldestLogsRequest.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor && logsToDelete > 0) {
+                        cursor.delete();
+                        logsToDelete--;
+                        cursor.continue();
+                    }
+                };
+            }
+        };
     } catch (error) {
         console.error('Failed to save log to IndexedDB', error);
     }
@@ -791,6 +814,22 @@ async function getLogs(limit = 100) {
             reject(event.target.errorCode);
         };
     });
+}
+
+async function clearLogs() {
+    try {
+        const db = await openDatabase();
+        const transaction = db.transaction([LOG_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(LOG_STORE_NAME);
+        store.clear();
+        return new Promise((resolve, reject) => {
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = (event) => reject(event.target.errorCode);
+        });
+    } catch (error) {
+        console.error('Failed to clear logs from IndexedDB', error);
+        throw error;
+    }
 }
 
 // 當頁面載入完成後，啟動播放器
@@ -822,6 +861,15 @@ window.addEventListener('load', () => {
         } catch (error) {
             console.error('Failed to show logs:', error);
             alert('無法顯示日誌，請查看 console。');
+        }
+    });
+
+    const clearLogsButton = document.getElementById('clear-logs-button');
+    clearLogsButton.addEventListener('click', async () => {
+        if (confirm('確定要清除所有日誌嗎？')) {
+            await clearLogs();
+            logContent.innerHTML = ''; // 清空顯示
+            alert('日誌已清除。');
         }
     });
 
