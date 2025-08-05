@@ -392,7 +392,7 @@ class AdPlayer {
 
                 let cacheStatus = '未知';
                 if (latestResource.transferSize === 0) {
-                    cacheStatus = '未經網路傳輸 (可能來自快取)';
+                    cacheStatus = '已從瀏覽器快取載入';
                 } else if (latestResource.transferSize > 0 && latestResource.transferSize < latestResource.decodedBodySize) {
                     cacheStatus = '部分從快取載入 (內容編碼)';
                 } else if (latestResource.transferSize === latestResource.decodedBodySize) {
