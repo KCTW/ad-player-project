@@ -57,3 +57,67 @@ html, body {
   background-color: rgba(255, 0, 0, 0.6); /* 增加通透度 */
   color: #fff;
 }
+
+.notification.cache-info {
+  background-color: rgba(100, 149, 237, 0.6); /* 淺藍色背景 */
+  font-size: 14px; /* 較小的字體 */
+}
+
+#exposure-rate {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: rgba(0, 0, 0, 0.7); /* 深色背景，增加可讀性 */
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-family: sans-serif;
+  font-size: 16px;
+  z-index: 1000;
+}
+
+#endpoint-selection-container {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: sans-serif;
+  font-size: 14px;
+  z-index: 1000;
+  max-height: 200px; /* 限制高度 */
+  overflow-y: auto; /* 超出時顯示捲軸 */
+}
+
+#endpoint-selection-container label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+#endpoint-selection-container input[type="checkbox"] {
+  margin-right: 5px;
+}
+
+#device-id-input-container {
+  position: absolute;
+  bottom: 20px;
+  left: 250px; /* 調整位置，避免與 Endpoint 選擇器重疊 */
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: sans-serif;
+  font-size: 14px;
+  z-index: 1000;
+}
+
+#device-id-input-container input[type="text"] {
+  width: 180px;
+  padding: 5px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  background-color: #333;
+  color: #fff;
+}
