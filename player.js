@@ -393,10 +393,12 @@ class AdPlayer {
                 let cacheStatus = '未知';
                 if (latestResource.transferSize === 0) {
                     cacheStatus = '已從瀏覽器快取載入';
-                } else if (latestResource.transferSize > 0 && latestResource.transferSize < latestResource.decodedBodySize) {
-                    cacheStatus = '部分從快取載入 (內容編碼)';
-                } else if (latestResource.transferSize === latestResource.decodedBodySize) {
-                    cacheStatus = '直接從網路載入 (未快取)';
+                } else if (latestResource.transferSize > 0) {
+                    if (latestResource.transferSize < latestResource.decodedBodySize) {
+                        cacheStatus = '直接從網路載入 (已壓縮)';
+                    } else {
+                        cacheStatus = '直接從網路載入 (未壓縮)';
+                    }
                 }
 
                 this.showNotification(`影片 ${latestResource.name.substring(latestResource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
