@@ -400,7 +400,7 @@ class AdPlayer {
 
                     let cacheStatus = '未知';
                     if (resource.transferSize === 0) {
-                        cacheStatus = '已從瀏覽器快取載入';
+                        cacheStatus = `已從瀏覽器快取載入 (無網路傳輸, 解碼大小: ${resource.decodedBodySize} bytes)`;
                     } else if (resource.transferSize > 0) {
                         if (resource.transferSize < resource.decodedBodySize) {
                             cacheStatus = `直接從網路載入 (已壓縮: ${resource.transferSize} / ${resource.decodedBodySize} bytes)`;
