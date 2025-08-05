@@ -210,6 +210,16 @@ html, body {
     background-color: #c82333;
 }
 
+.log-button-danger {
+    background-color: #ffc107;
+    color: black;
+    margin-right: 10px;
+}
+
+.log-button-danger:hover {
+    background-color: #e0a800;
+}
+
 #log-content {
     width: 80%;
     height: 70%;
