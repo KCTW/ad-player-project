@@ -381,44 +381,51 @@ class AdPlayer {
 
     /**
      * 檢查廣告媒體是否使用了本地快取
+     * 
+     * [註解原因]
+     * 由於跨域 (CORS) 問題，Performance API 無法精確獲取外部媒體資源的 transferSize 和 decodedBodySize。
+     * 這導致即使實際發生了網路傳輸，transferSize 也可能為 0，造成快取判斷的誤導。
+     * 為了避免提供不準確的資訊，暫時註解此功能。
+     * 
+     * 解決此問題需要伺服器端配置正確的 CORS 標頭 (如 Timing-Allow-Origin)。
      */
-    checkMediaCacheUsage() {
-        if (window.performance && window.performance.getEntriesByType) {
-            const resources = window.performance.getEntriesByType('resource');
-            const videoResources = resources.filter(resource =>
-                resource.initiatorType === 'video' ||
-                (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))
-            );
+    // checkMediaCacheUsage() {
+    //     if (window.performance && window.performance.getEntriesByType) {
+    //         const resources = window.performance.getEntriesByType('resource');
+    //         const videoResources = resources.filter(resource =>
+    //             resource.initiatorType === 'video' ||
+    //             (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))
+    //         );
 
-            if (videoResources.length > 0) {
-                videoResources.forEach(resource => {
-                    const resourceBaseName = resource.name.split('?')[0]; // 移除查詢參數，確保唯一性
-                    // 檢查是否已經報告過這個影片資源的快取狀態
-                    if (this.reportedVideoResources.has(resourceBaseName)) {
-                        return; // 如果已經報告過，則跳過
-                    }
+    //         if (videoResources.length > 0) {
+    //             videoResources.forEach(resource => {
+    //                 const resourceBaseName = resource.name.split('?')[0]; // 移除查詢參數，確保唯一性
+    //                 // 檢查是否已經報告過這個影片資源的快取狀態
+    //                 if (this.reportedVideoResources.has(resourceBaseName)) {
+    //                     return; // 如果已經報告過，則跳過
+    //                 }
 
-                    let cacheStatus = '未知';
-                    if (resource.transferSize === 0) {
-                        cacheStatus = `已從瀏覽器快取載入 (無網路傳輸, 解碼大小: ${resource.decodedBodySize} bytes)`;
-                    } else if (resource.transferSize > 0) {
-                        if (resource.transferSize < resource.decodedBodySize) {
-                            cacheStatus = `直接從網路載入 (已壓縮: ${resource.transferSize} / ${resource.decodedBodySize} bytes)`;
-                        } else {
-                            cacheStatus = `直接從網路載入 (未壓縮: ${resource.transferSize} bytes)`;
-                        }
-                    }
+    //                 let cacheStatus = '未知';
+    //                 if (resource.transferSize === 0) {
+    //                     cacheStatus = '已從瀏覽器快取載入';
+    //                 } else if (resource.transferSize > 0) {
+    //                     if (resource.transferSize < resource.decodedBodySize) {
+    //                         cacheStatus = `直接從網路載入 (已壓縮: ${resource.transferSize} / ${resource.decodedBodySize} bytes)`;
+    //                     } else {
+    //                         cacheStatus = `直接從網路載入 (未壓縮: ${resource.transferSize} bytes)`;
+    //                     }
+    //                 }
 
-                    this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)} (類型: ${resource.initiatorType}): ${cacheStatus}`, false, true);
-                    this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
-                });
-            } else {
-                this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
-            }
-        } else {
-            this.showNotification("瀏覽器不支援 Performance API 或 getEntriesByType('resource')，無法檢查快取使用情況。");
-        }
-    }
+    //                 this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)} (類型: ${resource.initiatorType}): ${cacheStatus}`, false, true);
+    //                 this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
+    //             });
+    //         } else {
+    //             this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
+    //         }
+    //     } else {
+    //         this.showNotification("瀏覽器不支援 Performance API 或 getEntriesByType('resource')，無法檢查快取使用情況。");
+    //     }
+    // }
 
     /**
      * 廣告進度更新事件
