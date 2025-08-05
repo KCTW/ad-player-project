@@ -311,6 +311,7 @@ class AdPlayer {
         if (this.currentAdTagUrl) {
             this.endpointFailureCounts[this.currentAdTagUrl] = 0;
         }
+        this.currentAdStartTime = Date.now(); // 在 AdsManager 載入時記錄時間
 
         this.adsManager = adsManagerLoadedEvent.getAdsManager(this.contentElement);
 
@@ -346,7 +347,6 @@ class AdPlayer {
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
         this.totalPlayCount++; // 增加總播放次數
-        this.currentAdStartTime = Date.now(); // 記錄當前廣告開始播放的時間
 
         // 更新十分鐘曝光歷史
         const now = new Date();
@@ -375,10 +375,7 @@ class AdPlayer {
 
         this.updateExposureDisplay(); // 更新曝光率顯示
         this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
-        // 延遲檢查媒體快取使用情況，給瀏覽器一些時間更新 Performance API 數據
-        setTimeout(() => {
-            this.checkMediaCacheUsage();
-        }, 500); // 延遲 500 毫秒
+        this.checkMediaCacheUsage(); // 檢查媒體快取使用情況
     }
 
     /**
