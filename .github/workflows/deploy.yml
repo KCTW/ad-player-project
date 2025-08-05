@@ -22,4 +22,4 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: . # 指定要部署的目錄 (根目錄)
+          publish_dir: src # 指定要部署的目錄 (src 資料夾)
