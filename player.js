@@ -90,6 +90,7 @@ class AdPlayer {
         this.totalRequestCount = 0; // 總請求次數
         this.selectedEndpoints = []; // 用於儲存使用者選擇的 Endpoint 名稱
         this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
+        this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
 
         // 異步載入設定
         this.loadSettings().then(() => {
@@ -309,7 +310,6 @@ class AdPlayer {
         if (this.currentAdTagUrl) {
             this.endpointFailureCounts[this.currentAdTagUrl] = 0;
         }
-        this.currentAdStartTime = Date.now(); // 在 AdsManager 載入時記錄時間
 
         this.adsManager = adsManagerLoadedEvent.getAdsManager(this.contentElement);
 
@@ -383,24 +383,30 @@ class AdPlayer {
         if (window.performance && window.performance.getEntriesByType) {
             const resources = window.performance.getEntriesByType('resource');
             const videoResources = resources.filter(resource =>
-                (resource.initiatorType === 'video' ||
-                (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))) &&
-                resource.startTime >= this.currentAdStartTime // 只處理當前廣告開始後載入的資源
+                resource.initiatorType === 'video' ||
+                (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))
             );
 
             if (videoResources.length > 0) {
-                const latestResource = videoResources[videoResources.length - 1]; // 只取最後一個資源
+                videoResources.forEach(resource => {
+                    const resourceBaseName = resource.name.split('?')[0]; // 移除查詢參數，確保唯一性
+                    // 檢查是否已經報告過這個影片資源的快取狀態
+                    if (this.reportedVideoResources.has(resourceBaseName)) {
+                        return; // 如果已經報告過，則跳過
+                    }
 
-                let cacheStatus = '未知';
-                if (latestResource.transferSize === 0) {
-                    cacheStatus = '已從瀏覽器快取載入';
-                } else if (latestResource.transferSize > 0 && latestResource.transferSize < latestResource.decodedBodySize) {
-                    cacheStatus = '部分從快取載入 (內容編碼)';
-                } else if (latestResource.transferSize === latestResource.decodedBodySize) {
-                    cacheStatus = '直接從網路載入 (未快取)';
-                }
+                    let cacheStatus = '未知';
+                    if (resource.transferSize === 0) {
+                        cacheStatus = '已從瀏覽器快取載入';
+                    } else if (resource.transferSize > 0 && resource.transferSize < resource.decodedBodySize) {
+                        cacheStatus = '部分從快取載入 (內容編碼)';
+                    } else if (resource.transferSize === resource.decodedBodySize) {
+                        cacheStatus = '直接從網路載入 (未快取)';
+                    }
 
-                this.showNotification(`影片 ${latestResource.name.substring(latestResource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
+                    this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
+                    this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
+                });
             } else {
                 this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
             }
