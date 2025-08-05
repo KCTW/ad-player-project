@@ -83,7 +83,11 @@ class AdPlayer {
 
         // 曝光率相關
         this.adStartTimestamps = []; // 儲存廣告開始播放的時間戳
+        this.tenMinuteExposureHistory = []; // 儲存十分鐘區間的曝光歷史
         this.exposureDisplayElement = null; // 顯示曝光率的 DOM 元素
+        this.playRequestDisplayElement = null; // 顯示總播放/請求次數的 DOM 元素
+        this.totalPlayCount = 0; // 總播放次數
+        this.totalRequestCount = 0; // 總請求次數
         this.selectedEndpoints = []; // 用於儲存使用者選擇的 Endpoint 名稱
         this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
         this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
@@ -168,8 +172,9 @@ class AdPlayer {
         this.initImaSDK();
         this.playNextAd(); // 開始無限循環
         this.exposureDisplayElement = document.getElementById('exposure-rate');
+        this.playRequestDisplayElement = document.getElementById('play-request-counts');
         this.updateExposureDisplay(); // 初始化曝光率顯示
-        setInterval(() => this.updateExposureDisplay(), 60 * 1000); // 每分鐘更新一次
+        this.updatePlayRequestDisplay(); // 初始化總播放/請求次數顯示
     }
 
     /**
@@ -230,6 +235,8 @@ class AdPlayer {
         }
         
         this.currentAdTagUrl = url.toString(); // 記錄當前請求的 URL
+        this.totalRequestCount++; // 每次構建 URL 都視為一次請求
+        this.updatePlayRequestDisplay(); // 更新顯示
         return this.currentAdTagUrl;
     }
 
@@ -337,7 +344,35 @@ class AdPlayer {
             this.showNotification(message);
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
-        this.adStartTimestamps.push(Date.now()); // 記錄廣告開始播放的時間
+        this.totalPlayCount++; // 增加總播放次數
+
+        // 更新十分鐘曝光歷史
+        const now = new Date();
+        const currentMinute = now.getMinutes();
+        const currentHour = now.getHours();
+        const tenMinuteInterval = Math.floor(currentMinute / 10);
+        const key = `${currentHour.toString().padStart(2, '0')}:${(tenMinuteInterval * 10).toString().padStart(2, '0')}`;
+
+        let found = false;
+        for (let i = 0; i < this.tenMinuteExposureHistory.length; i++) {
+            if (this.tenMinuteExposureHistory[i].key === key) {
+                this.tenMinuteExposureHistory[i].count++;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            this.tenMinuteExposureHistory.push({ key: key, count: 1, timestamp: now.getTime() });
+        }
+
+        // 保持最多三個區間的歷史記錄
+        this.tenMinuteExposureHistory.sort((a, b) => b.timestamp - a.timestamp);
+        if (this.tenMinuteExposureHistory.length > 3) {
+            this.tenMinuteExposureHistory = this.tenMinuteExposureHistory.slice(0, 3);
+        }
+
+        this.updateExposureDisplay(); // 更新曝光率顯示
+        this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
         this.checkMediaCacheUsage(); // 檢查媒體快取使用情況
     }
 
@@ -353,24 +388,18 @@ class AdPlayer {
             );
 
             if (videoResources.length > 0) {
-                videoResources.forEach(resource => {
-                    // 檢查是否已經報告過這個影片資源的快取狀態
-                    if (this.reportedVideoResources.has(resource.name)) {
-                        return; // 如果已經報告過，則跳過
-                    }
+                const latestResource = videoResources[videoResources.length - 1]; // 只取最後一個資源
 
-                    let cacheStatus = '未知';
-                    if (resource.transferSize === 0) {
-                        cacheStatus = '已從瀏覽器快取載入';
-                    } else if (resource.transferSize > 0 && resource.transferSize < resource.decodedBodySize) {
-                        cacheStatus = '部分從快取載入 (內容編碼)';
-                    } else if (resource.transferSize === resource.decodedBodySize) {
-                        cacheStatus = '直接從網路載入 (未快取)';
-                    }
+                let cacheStatus = '未知';
+                if (latestResource.transferSize === 0) {
+                    cacheStatus = '未經網路傳輸 (可能來自快取)';
+                } else if (latestResource.transferSize > 0 && latestResource.transferSize < latestResource.decodedBodySize) {
+                    cacheStatus = '部分從快取載入 (內容編碼)';
+                } else if (latestResource.transferSize === latestResource.decodedBodySize) {
+                    cacheStatus = '直接從網路載入 (未快取)';
+                }
 
-                    this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
-                    this.reportedVideoResources.add(resource.name); // 記錄已報告的影片資源
-                });
+                this.showNotification(`影片 ${latestResource.name.substring(latestResource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
             } else {
                 this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
             }
@@ -417,6 +446,8 @@ class AdPlayer {
     onAllAdsCompleted() {
         this.showNotification("本則廣告播放完畢。");
         this.lastAdEndTime = Date.now(); // 記錄廣告結束時間
+        this.updateExposureDisplay(); // 廣告播放結束時更新曝光率
+        this.updatePlayRequestDisplay(); // 廣告播放結束時更新總播放/請求次數
         if(this.adsManager) {
             this.adsManager.destroy(); // 銷毀舊的 manager
         }
@@ -442,6 +473,7 @@ class AdPlayer {
 
         const fullMessage = `廣告錯誤 (Code: ${errorCode})\n${errorMessage}`;
         this.showNotification(fullMessage, true);
+        this.updatePlayRequestDisplay(); // 錯誤時也更新總播放/請求次數
 
         if (this.adsManager) {
             this.adsManager.destroy();
@@ -560,26 +592,31 @@ class AdPlayer {
     }
 
     /**
-     * 計算近一小時的廣告曝光次數
-     * @returns {number} 近一小時的廣告曝光次數
-     */
-    calculateHourlyExposure() {
-        const now = Date.now();
-        const oneHourAgo = now - (60 * 60 * 1000); // 一小時前的時間戳
-
-        // 移除超過一小時的舊時間戳
-        this.adStartTimestamps = this.adStartTimestamps.filter(timestamp => timestamp >= oneHourAgo);
-
-        return this.adStartTimestamps.length;
-    }
-
-    /**
-     * 更新畫面上的曝光率顯示
+     * 更新畫面上的曝光率顯示 (最近三個十分鐘區間)
      */
     updateExposureDisplay() {
         if (this.exposureDisplayElement) {
-            const exposureCount = this.calculateHourlyExposure();
-            this.exposureDisplayElement.textContent = `近一小時曝光: ${exposureCount} 次`;
+            let displayContent = "";
+            if (this.tenMinuteExposureHistory.length === 0) {
+                displayContent = "近十分鐘曝光: 0 次"; // Default message if no data
+            } else {
+                // Sort by timestamp descending and take the top 3
+                const sortedHistory = [...this.tenMinuteExposureHistory].sort((a, b) => b.timestamp - a.timestamp);
+                for (let i = 0; i < Math.min(sortedHistory.length, 3); i++) {
+                    const item = sortedHistory[i];
+                    displayContent += `${item.key} - ${item.count} 次\n`;
+                }
+            }
+            this.exposureDisplayElement.textContent = displayContent.trim();
+        }
+    }
+
+    /**
+     * 更新畫面上的總播放次數和請求次數顯示
+     */
+    updatePlayRequestDisplay() {
+        if (this.playRequestDisplayElement) {
+            this.playRequestDisplayElement.textContent = `總播放/請求: ${this.totalPlayCount} / ${this.totalRequestCount}`;
         }
     }
 }
