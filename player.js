@@ -84,6 +84,9 @@ class AdPlayer {
         // 曝光率相關
         this.adStartTimestamps = []; // 儲存廣告開始播放的時間戳
         this.exposureDisplayElement = null; // 顯示曝光率的 DOM 元素
+        this.playRequestDisplayElement = null; // 顯示總播放/請求次數的 DOM 元素
+        this.totalPlayCount = 0; // 總播放次數
+        this.totalRequestCount = 0; // 總請求次數
         this.selectedEndpoints = []; // 用於儲存使用者選擇的 Endpoint 名稱
         this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
         this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
@@ -168,8 +171,9 @@ class AdPlayer {
         this.initImaSDK();
         this.playNextAd(); // 開始無限循環
         this.exposureDisplayElement = document.getElementById('exposure-rate');
+        this.playRequestDisplayElement = document.getElementById('play-request-counts');
         this.updateExposureDisplay(); // 初始化曝光率顯示
-        setInterval(() => this.updateExposureDisplay(), 60 * 1000); // 每分鐘更新一次
+        this.updatePlayRequestDisplay(); // 初始化總播放/請求次數顯示
     }
 
     /**
@@ -230,6 +234,8 @@ class AdPlayer {
         }
         
         this.currentAdTagUrl = url.toString(); // 記錄當前請求的 URL
+        this.totalRequestCount++; // 每次構建 URL 都視為一次請求
+        this.updatePlayRequestDisplay(); // 更新顯示
         return this.currentAdTagUrl;
     }
 
@@ -338,6 +344,9 @@ class AdPlayer {
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
         this.adStartTimestamps.push(Date.now()); // 記錄廣告開始播放的時間
+        this.totalPlayCount++; // 增加總播放次數
+        this.updateExposureDisplay(); // 更新曝光率顯示
+        this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
         this.checkMediaCacheUsage(); // 檢查媒體快取使用情況
     }
 
@@ -417,6 +426,8 @@ class AdPlayer {
     onAllAdsCompleted() {
         this.showNotification("本則廣告播放完畢。");
         this.lastAdEndTime = Date.now(); // 記錄廣告結束時間
+        this.updateExposureDisplay(); // 廣告播放結束時更新曝光率
+        this.updatePlayRequestDisplay(); // 廣告播放結束時更新總播放/請求次數
         if(this.adsManager) {
             this.adsManager.destroy(); // 銷毀舊的 manager
         }
@@ -442,6 +453,7 @@ class AdPlayer {
 
         const fullMessage = `廣告錯誤 (Code: ${errorCode})\n${errorMessage}`;
         this.showNotification(fullMessage, true);
+        this.updatePlayRequestDisplay(); // 錯誤時也更新總播放/請求次數
 
         if (this.adsManager) {
             this.adsManager.destroy();
@@ -580,6 +592,15 @@ class AdPlayer {
         if (this.exposureDisplayElement) {
             const exposureCount = this.calculateHourlyExposure();
             this.exposureDisplayElement.textContent = `近一小時曝光: ${exposureCount} 次`;
+        }
+    }
+
+    /**
+     * 更新畫面上的總播放次數和請求次數顯示
+     */
+    updatePlayRequestDisplay() {
+        if (this.playRequestDisplayElement) {
+            this.playRequestDisplayElement.textContent = `總播放/請求: ${this.totalPlayCount} / ${this.totalRequestCount}`;
         }
     }
 }

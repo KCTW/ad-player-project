@@ -64,9 +64,6 @@ html, body {
 }
 
 #exposure-rate {
-  position: absolute;
-  top: 20px;
-  right: 20px;
   background-color: rgba(0, 0, 0, 0.7); /* 深色背景，增加可讀性 */
   color: #fff;
   padding: 8px 12px;
@@ -76,17 +73,44 @@ html, body {
   z-index: 1000;
 }
 
-#endpoint-selection-container {
+#play-request-counts {
+  background-color: rgba(0, 0, 0, 0.7); /* 深色背景，增加可讀性 */
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-family: sans-serif;
+  font-size: 16px;
+  z-index: 1000;
+  margin-top: 10px; /* 與上方元素間距 */
+}
+
+#top-right-info {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  z-index: 1000;
+}
+
+#controls-container {
   position: absolute;
   bottom: 20px;
   left: 20px;
+  display: flex;
+  flex-direction: row; /* 讓兩個容器並排 */
+  gap: 20px; /* 兩個容器之間的間距 */
+  z-index: 1000;
+}
+
+#endpoint-selection-container {
   background-color: rgba(0, 0, 0, 0.7);
   color: #fff;
   padding: 10px;
   border-radius: 5px;
   font-family: sans-serif;
   font-size: 14px;
-  z-index: 1000;
   max-height: 200px; /* 限制高度 */
   overflow-y: auto; /* 超出時顯示捲軸 */
 }
@@ -101,16 +125,12 @@ html, body {
 }
 
 #device-id-input-container {
-  position: absolute;
-  bottom: 20px;
-  left: 250px; /* 調整位置，避免與 Endpoint 選擇器重疊 */
   background-color: rgba(0, 0, 0, 0.7);
   color: #fff;
   padding: 10px;
   border-radius: 5px;
   font-family: sans-serif;
   font-size: 14px;
-  z-index: 1000;
 }
 
 #device-id-input-container input[type="text"] {
