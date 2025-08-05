@@ -1,5 +1,7 @@
 /**
  * 廣告播放器
+ * CI/CD 觸發變更 (由 Gemini 代理添加)
+ *
  * - 遵循 VAST 廣告串接技術規格書 v20250528
  * - 實作預載機制以達到順暢播放並避免 stalled
  * - 建立穩健的錯誤處理與無限循環播放
@@ -78,6 +80,29 @@ class AdPlayer {
         this.adLoadRetries = 0; // 用於計算錯誤重試次數
         this.endpointFailureCounts = {}; // 追蹤每個 Endpoint 的連續失敗次數
         this.currentAdTagUrl = null; // 當前請求的 Ad Tag URL
+
+        // 曝光率相關
+        this.adStartTimestamps = []; // 儲存廣告開始播放的時間戳
+        this.tenMinuteExposureHistory = []; // 儲存十分鐘區間的曝光歷史
+        this.exposureDisplayElement = null; // 顯示曝光率的 DOM 元素
+        this.playRequestDisplayElement = null; // 顯示總播放/請求次數的 DOM 元素
+        this.totalPlayCount = 0; // 總播放次數
+        this.totalRequestCount = 0; // 總請求次數
+        this.selectedEndpoints = []; // 用於儲存使用者選擇的 Endpoint 名稱
+        this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
+        this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
+
+        // 異步載入設定
+        this.loadSettings().then(() => {
+            // 設定載入完成後，渲染 UI
+            this.renderEndpointSelection();
+            this.renderDeviceIdInput();
+        });
+    }
+
+    async loadSettings() {
+        this.selectedEndpoints = (await loadSetting('selectedEndpoints')) || [];
+        this.customDeviceId = (await loadSetting('customDeviceId')) || '';
     }
 
     /**
@@ -85,24 +110,27 @@ class AdPlayer {
      * @param {string} message - 要顯示的訊息
      * @param {boolean} isError - 是否為錯誤訊息
      */
-    showNotification(message, isError = false) {
+    showNotification(message, isError = false, isCache = false) {
         console.log(message); // 仍然在 console 中保留日誌
         const notification = document.createElement('div');
         notification.className = 'notification';
         if (isError) {
             notification.classList.add('error');
         }
+        if (isCache) {
+            notification.classList.add('cache-info');
+        }
         notification.textContent = message;
 
         this.notificationContainer.appendChild(notification);
 
-        // 5秒後開始淡出，5.5秒後移除
+        // 8秒後開始淡出，8.5秒後移除
         setTimeout(() => {
             notification.classList.add('fade-out');
             setTimeout(() => {
                 notification.remove();
             }, 500);
-        }, 5000);
+        }, 8000);
     }
 
     /**
@@ -138,10 +166,15 @@ class AdPlayer {
     /**
      * 初始化播放器
      */
-    init() {
+    async init() {
         this.showNotification("播放器初始化...");
+        await this.loadSettings(); // 等待設定載入完成
         this.initImaSDK();
         this.playNextAd(); // 開始無限循環
+        this.exposureDisplayElement = document.getElementById('exposure-rate');
+        this.playRequestDisplayElement = document.getElementById('play-request-counts');
+        this.updateExposureDisplay(); // 初始化曝光率顯示
+        this.updatePlayRequestDisplay(); // 初始化總播放/請求次數顯示
     }
 
     /**
@@ -168,12 +201,22 @@ class AdPlayer {
      * @returns {string} 完整的請求 URL
      */
     buildVastUrl() {
-        const randomEndpoint = this.VAST_ENDPOINTS[Math.floor(Math.random() * this.VAST_ENDPOINTS.length)];
+        let availableEndpoints = this.VAST_ENDPOINTS;
+        if (this.selectedEndpoints.length > 0) {
+            availableEndpoints = this.VAST_ENDPOINTS.filter(endpoint => this.selectedEndpoints.includes(endpoint.name));
+        }
+
+        if (availableEndpoints.length === 0) {
+            this.showNotification("沒有可用的 Endpoint，請至少選擇一個。", true);
+            return null; // 返回 null，表示無法構建 URL
+        }
+
+        const randomEndpoint = availableEndpoints[Math.floor(Math.random() * availableEndpoints.length)];
         this.showNotification(`本次使用 Endpoint: ${randomEndpoint.name}`);
 
         const url = new URL(randomEndpoint.url);
         const params = {
-            device_id: this.PLAYER_CONFIG.DEVICE_ID,
+            device_id: this.customDeviceId || this.PLAYER_CONFIG.DEVICE_ID,
             rmaxpublisher_id: this.PLAYER_CONFIG.RMAXPUBLISHER_ID,
             store_number: this.PLAYER_CONFIG.STORE_NUMBER,
             business_hours: this.PLAYER_CONFIG.BUSINESS_HOURS,
@@ -192,6 +235,8 @@ class AdPlayer {
         }
         
         this.currentAdTagUrl = url.toString(); // 記錄當前請求的 URL
+        this.totalRequestCount++; // 每次構建 URL 都視為一次請求
+        this.updatePlayRequestDisplay(); // 更新顯示
         return this.currentAdTagUrl;
     }
 
@@ -235,9 +280,20 @@ class AdPlayer {
                 return response.text();
             })
             .then(vastXml => {
-                this.showNotification("VAST 預載成功！");
-                this.preloadedVastXml = vastXml;
-                this.displayVastSummary(vastXml);
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(vastXml, "text/xml");
+                const adNodes = xmlDoc.querySelectorAll("Ad");
+
+                if (adNodes.length > 0) {
+                    this.showNotification("VAST 預載成功！");
+                    this.preloadedVastXml = vastXml;
+                    this.displayVastSummary(vastXml);
+                } else {
+                    this.showNotification("VAST 預載失敗：沒有廣告內容。", true);
+                    this.preloadedVastXml = null; // 確保預載失敗時，狀態是乾淨的
+                    // 觸發錯誤處理流程，而不是直接播放下一則廣告
+                    this.onAdError({ getError: () => ({ getVastErrorCode: () => 303, getMessage: () => 'No ads VAST response after one or more Wrappers.' }) });
+                }
             })
             .catch(error => {
                 this.showNotification(`預載下一則 VAST 時發生錯誤: ${error}`, true);
@@ -278,6 +334,7 @@ class AdPlayer {
      * 廣告影片真正開始播放時觸發
      */
     onAdStarted() {
+        this.reportedVideoResources.clear(); // 清空已報告的影片資源，確保每次廣告播放都重新檢查
         if (this.lastAdEndTime > 0) {
             const interval = (Date.now() - this.lastAdEndTime) / 1000;
             let message = `廣告切換耗時: ${interval.toFixed(2)} 秒`;
@@ -287,7 +344,88 @@ class AdPlayer {
             this.showNotification(message);
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
+        this.totalPlayCount++; // 增加總播放次數
+
+        // 更新十分鐘曝光歷史
+        const now = new Date();
+        const currentMinute = now.getMinutes();
+        const currentHour = now.getHours();
+        const tenMinuteInterval = Math.floor(currentMinute / 10);
+        const key = `${currentHour.toString().padStart(2, '0')}:${(tenMinuteInterval * 10).toString().padStart(2, '0')}`;
+
+        let found = false;
+        for (let i = 0; i < this.tenMinuteExposureHistory.length; i++) {
+            if (this.tenMinuteExposureHistory[i].key === key) {
+                this.tenMinuteExposureHistory[i].count++;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            this.tenMinuteExposureHistory.push({ key: key, count: 1, timestamp: now.getTime() });
+        }
+
+        // 保持最多三個區間的歷史記錄
+        this.tenMinuteExposureHistory.sort((a, b) => b.timestamp - a.timestamp);
+        if (this.tenMinuteExposureHistory.length > 3) {
+            this.tenMinuteExposureHistory = this.tenMinuteExposureHistory.slice(0, 3);
+        }
+
+        this.updateExposureDisplay(); // 更新曝光率顯示
+        this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
+        // 延遲檢查媒體快取使用情況，給瀏覽器一些時間更新 Performance API 數據
+        setTimeout(() => {
+            // this.checkMediaCacheUsage();
+        }, 500); // 延遲 500 毫秒
     }
+
+    /**
+     * 檢查廣告媒體是否使用了本地快取
+     * 
+     * [註解原因]
+     * 由於跨域 (CORS) 問題，Performance API 無法精確獲取外部媒體資源的 transferSize 和 decodedBodySize。
+     * 這導致即使實際發生了網路傳輸，transferSize 也可能為 0，造成快取判斷的誤導。
+     * 為了避免提供不準確的資訊，暫時註解此功能。
+     * 
+     * 解決此問題需要伺服器端配置正確的 CORS 標頭 (如 Timing-Allow-Origin)。
+     */
+    // checkMediaCacheUsage() {
+    //     if (window.performance && window.performance.getEntriesByType) {
+    //         const resources = window.performance.getEntriesByType('resource');
+    //         const videoResources = resources.filter(resource =>
+    //             resource.initiatorType === 'video' ||
+    //             (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))
+    //         );
+
+    //         if (videoResources.length > 0) {
+    //             videoResources.forEach(resource => {
+    //                 const resourceBaseName = resource.name.split('?')[0]; // 移除查詢參數，確保唯一性
+    //                 // 檢查是否已經報告過這個影片資源的快取狀態
+    //                 if (this.reportedVideoResources.has(resourceBaseName)) {
+    //                     return; // 如果已經報告過，則跳過
+    //                 }
+
+    //                 let cacheStatus = '未知';
+    //                 if (resource.transferSize === 0) {
+    //                     cacheStatus = '已從瀏覽器快取載入';
+    //                 } else if (resource.transferSize > 0) {
+    //                     if (resource.transferSize < resource.decodedBodySize) {
+    //                         cacheStatus = `直接從網路載入 (已壓縮: ${resource.transferSize} / ${resource.decodedBodySize} bytes)`;
+    //                     } else {
+    //                         cacheStatus = `直接從網路載入 (未壓縮: ${resource.transferSize} bytes)`;
+    //                     }
+    //                 }
+
+    //                 this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)} (類型: ${resource.initiatorType}): ${cacheStatus}`, false, true);
+    //                 this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
+    //             });
+    //         } else {
+    //             this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
+    //         }
+    //     } else {
+    //         this.showNotification("瀏覽器不支援 Performance API 或 getEntriesByType('resource')，無法檢查快取使用情況。");
+    //     }
+    // }
 
     /**
      * 廣告進度更新事件
@@ -327,8 +465,10 @@ class AdPlayer {
     onAllAdsCompleted() {
         this.showNotification("本則廣告播放完畢。");
         this.lastAdEndTime = Date.now(); // 記錄廣告結束時間
+        this.updateExposureDisplay(); // 廣告播放結束時更新曝光率
+        this.updatePlayRequestDisplay(); // 廣告播放結束時更新總播放/請求次數
         if(this.adsManager) {
-            this.adsManager.destroy(); // 銷毀舊的 manager
+            this.adsManager.destroy();
         }
         this.playNextAd(); // 無縫接軌下一則
     }
@@ -352,6 +492,7 @@ class AdPlayer {
 
         const fullMessage = `廣告錯誤 (Code: ${errorCode})\n${errorMessage}`;
         this.showNotification(fullMessage, true);
+        this.updatePlayRequestDisplay(); // 錯誤時也更新總播放/請求次數
 
         if (this.adsManager) {
             this.adsManager.destroy();
@@ -367,6 +508,185 @@ class AdPlayer {
             this.playNextAd();
         }, delay);
     }
+
+    /**
+     * 渲染 Endpoint 選擇器
+     */
+    renderEndpointSelection() {
+        const container = document.getElementById('endpoint-selection-container');
+        if (!container) return;
+
+        container.innerHTML = ''; // 清空現有內容
+
+        const title = document.createElement('div');
+        title.textContent = '選擇廣告來源:';
+        title.style.fontWeight = 'bold';
+        title.style.marginBottom = '5px';
+        container.appendChild(title);
+
+        this.VAST_ENDPOINTS.forEach(endpoint => {
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = endpoint.name;
+            checkbox.checked = this.selectedEndpoints.includes(endpoint.name); // 根據已選擇的狀態設定
+
+            checkbox.addEventListener('change', async (event) => {
+                if (event.target.checked) {
+                    this.selectedEndpoints.push(endpoint.name);
+                } else {
+                    this.selectedEndpoints = this.selectedEndpoints.filter(name => name !== endpoint.name);
+                }
+                await saveSetting('selectedEndpoints', this.selectedEndpoints); // 儲存設定
+                // 重新啟動播放，以使用新的選擇
+                this.playNextAd();
+            });
+
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(endpoint.name));
+            container.appendChild(label);
+            container.appendChild(document.createElement('br'));
+        });
+    }
+
+    /**
+     * 渲染 Device ID 輸入欄位
+     */
+    renderDeviceIdInput() {
+        const container = document.getElementById('device-id-input-container');
+        if (!container) return;
+
+        container.innerHTML = ''; // 清空現有內容
+
+        const title = document.createElement('div');
+        title.textContent = '自訂 Device ID:';
+        title.style.fontWeight = 'bold';
+        title.style.marginBottom = '5px';
+        container.appendChild(title);
+
+        // 下拉選單
+        const select = document.createElement('select');
+        const deviceIds = [
+            '', // 預設空值，表示使用 PLAYER_CONFIG 中的 DEVICE_ID
+            'KC-KC-KC-KC-KC-II',
+            '0K37HNCWB00068Z',
+            '0K37HNCW600099K',
+            '0K37HNCW600098J',
+            '0K37HNCW600091Z',
+            '0QY0HNCX300122K',
+            '07YZHNBNB00088R',
+            'c279508081931351',
+            '4ae0f8bc725bb311'
+        ];
+
+        deviceIds.forEach(id => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = id === '' ? '使用預設 (KC-KC-KC-KC-KC-II)' : id;
+            select.appendChild(option);
+        });
+
+        select.value = this.customDeviceId; // 設定選單的預設值
+        select.addEventListener('change', async (event) => {
+            this.customDeviceId = event.target.value.trim();
+            this.showNotification(`Device ID 已設定為: ${this.customDeviceId || '預設'}`);
+            await saveSetting('customDeviceId', this.customDeviceId); // 儲存設定
+            this.playNextAd(); // 重新啟動播放，以使用新的 Device ID
+        });
+        container.appendChild(select);
+
+        // 手動輸入框
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = '或手動輸入 Device ID';
+        input.value = this.customDeviceId; // 顯示當前值
+        input.style.marginTop = '5px';
+        input.addEventListener('change', async (event) => {
+            this.customDeviceId = event.target.value.trim();
+            this.showNotification(`Device ID 已設定為: ${this.customDeviceId || '預設'}`);
+            await saveSetting('customDeviceId', this.customDeviceId); // 儲存設定
+            this.playNextAd(); // 重新啟動播放，以使用新的 Device ID
+        });
+        container.appendChild(input);
+    }
+
+    /**
+     * 更新畫面上的曝光率顯示 (最近三個十分鐘區間)
+     */
+    updateExposureDisplay() {
+        if (this.exposureDisplayElement) {
+            let displayContent = "";
+            if (this.tenMinuteExposureHistory.length === 0) {
+                displayContent = "近十分鐘曝光: 0 次"; // Default message if no data
+            } else {
+                // Sort by timestamp descending and take the top 3
+                const sortedHistory = [...this.tenMinuteExposureHistory].sort((a, b) => b.timestamp - a.timestamp);
+                for (let i = 0; i < Math.min(sortedHistory.length, 3); i++) {
+                    const item = sortedHistory[i];
+                    displayContent += `${item.key} - ${item.count} 次\n`;
+                }
+            }
+            this.exposureDisplayElement.textContent = displayContent.trim();
+        }
+    }
+
+    /**
+     * 更新畫面上的總播放次數和請求次數顯示
+     */
+    updatePlayRequestDisplay() {
+        if (this.playRequestDisplayElement) {
+            this.playRequestDisplayElement.textContent = `總播放/請求: ${this.totalPlayCount} / ${this.totalRequestCount}`;
+        }
+    }
+}
+
+// IndexedDB 相關工具函數
+const DB_NAME = 'AdPlayerDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'settings';
+
+function openDatabase() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+
+        request.onsuccess = (event) => {
+            resolve(event.target.result);
+        };
+
+        request.onerror = (event) => {
+            console.error("IndexedDB error:", event.target.errorCode);
+            reject(event.target.errorCode);
+        };
+    });
+}
+
+async function saveSetting(key, value) {
+    const db = await openDatabase();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    store.put(value, key);
+    return new Promise((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = (event) => reject(event.target.errorCode);
+    });
+}
+
+async function loadSetting(key) {
+    const db = await openDatabase();
+    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get(key);
+    return new Promise((resolve, reject) => {
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => reject(event.target.errorCode);
+    });
 }
 
 // 當頁面載入完成後，啟動播放器
