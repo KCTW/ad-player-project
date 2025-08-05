@@ -363,8 +363,9 @@ class AdPlayer {
 
             if (videoResources.length > 0) {
                 videoResources.forEach(resource => {
+                    const resourceBaseName = resource.name.split('?')[0]; // 移除查詢參數，確保唯一性
                     // 檢查是否已經報告過這個影片資源的快取狀態
-                    if (this.reportedVideoResources.has(resource.name)) {
+                    if (this.reportedVideoResources.has(resourceBaseName)) {
                         return; // 如果已經報告過，則跳過
                     }
 
@@ -378,7 +379,7 @@ class AdPlayer {
                     }
 
                     this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)}: ${cacheStatus}`, false, true);
-                    this.reportedVideoResources.add(resource.name); // 記錄已報告的影片資源
+                    this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
                 });
             } else {
                 this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
