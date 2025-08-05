@@ -1,0 +1,97 @@
+/* 日誌檢視器樣式 */
+#show-logs-button {
+    padding: 10px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#show-logs-button:hover {
+    background-color: #0056b3;
+}
+
+#log-viewer-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 2000; /* 確保在最上層 */
+    display: none; /* 預設隱藏 */
+    flex-direction: column; /* 改為 column */
+    justify-content: center;
+    align-items: center;
+}
+
+#log-viewer-header {
+    width: 80%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: #222;
+    border-bottom: 1px solid #555;
+    border-radius: 5px 5px 0 0;
+}
+
+#log-viewer-header h3 {
+    margin: 0;
+    color: #eee;
+}
+
+#close-logs-button {
+    padding: 5px 10px;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#close-logs-button:hover {
+    background-color: #c82333;
+}
+
+.log-button-danger {
+    background-color: #ffc107;
+    color: black;
+    margin-right: 10px;
+}
+
+.log-button-danger:hover {
+    background-color: #e0a800;
+}
+
+#log-content {
+    width: 80%;
+    height: 70%;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    padding: 20px;
+    border-radius: 0 0 5px 5px;
+    overflow-y: scroll;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.log-line {
+    padding: 2px 0;
+}
+
+.log-line.error {
+    color: #ff8a8a;
+}
+
+.log-line.info {
+    color: #a6e22e;
+}
+
+.log-line.cache {
+    color: #66d9ef;
+}

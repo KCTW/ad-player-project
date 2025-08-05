@@ -1,0 +1,25 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* 避免出現捲軸 */
+  background-color: #000; /* 預設背景為黑色 */
+}
+
+#ad-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#content-element {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  object-fit: contain; /* 核心：這行程式碼會讓影片等比例縮放 */
+}
