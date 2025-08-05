@@ -91,6 +91,7 @@ class AdPlayer {
         this.selectedEndpoints = []; // 用於儲存使用者選擇的 Endpoint 名稱
         this.customDeviceId = ''; // 用於儲存使用者自訂的 Device ID
         this.reportedVideoResources = new Set(); // 用於追蹤已報告的影片資源，避免重複顯示快取訊息
+        this.currentAdStartTime = 0; // 記錄當前廣告開始播放的時間戳
 
         // 異步載入設定
         this.loadSettings().then(() => {
@@ -345,6 +346,7 @@ class AdPlayer {
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
         this.totalPlayCount++; // 增加總播放次數
+        this.currentAdStartTime = Date.now(); // 記錄當前廣告開始播放的時間
 
         // 更新十分鐘曝光歷史
         const now = new Date();
@@ -386,8 +388,9 @@ class AdPlayer {
         if (window.performance && window.performance.getEntriesByType) {
             const resources = window.performance.getEntriesByType('resource');
             const videoResources = resources.filter(resource =>
-                resource.initiatorType === 'video' ||
-                (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))
+                (resource.initiatorType === 'video' ||
+                (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))) &&
+                resource.startTime >= this.currentAdStartTime // 只處理當前廣告開始後載入的資源
             );
 
             if (videoResources.length > 0) {
