@@ -5,7 +5,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main # 只在 main 分支被推送時觸發
+      - master # 只在 master 分支被推送時觸發
 
 jobs:
   deploy:
