@@ -373,7 +373,10 @@ class AdPlayer {
 
         this.updateExposureDisplay(); // 更新曝光率顯示
         this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
-        this.checkMediaCacheUsage(); // 檢查媒體快取使用情況
+        // 延遲檢查媒體快取使用情況，給瀏覽器一些時間更新 Performance API 數據
+        setTimeout(() => {
+            this.checkMediaCacheUsage();
+        }, 500); // 延遲 500 毫秒
     }
 
     /**
