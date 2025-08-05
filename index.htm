@@ -18,6 +18,15 @@
   <div id="controls-container">
     <div id="endpoint-selection-container"></div>
     <div id="device-id-input-container"></div>
+    <button id="show-logs-button">顯示日誌</button>
+  </div>
+
+  <div id="log-viewer-container" style="display: none;">
+    <div id="log-viewer-header">
+      <h3>日誌檢視器</h3>
+      <button id="close-logs-button">關閉</button>
+    </div>
+    <pre id="log-content"></pre>
   </div>
 
   <script src="player.js"></script>

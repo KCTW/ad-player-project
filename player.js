@@ -111,6 +111,13 @@ class AdPlayer {
      * @param {boolean} isError - 是否為錯誤訊息
      */
     showNotification(message, isError = false, isCache = false) {
+        const logData = {
+            level: isError ? 'error' : 'info',
+            message: message,
+            timestamp: new Date().toISOString()
+        };
+        saveLog(logData);
+
         console.log(message); // 仍然在 console 中保留日誌
         const notification = document.createElement('div');
         notification.className = 'notification';
@@ -492,6 +499,20 @@ class AdPlayer {
 
         const fullMessage = `廣告錯誤 (Code: ${errorCode})\n${errorMessage}`;
         this.showNotification(fullMessage, true);
+
+        // Save detailed error log
+        saveLog({
+            level: 'error',
+            message: 'VAST Error',
+            details: {
+                errorCode: errorCode,
+                errorMessage: errorMessage,
+                adTagUrl: adTagUrl,
+                retries: this.adLoadRetries,
+                failureCount: failureCount
+            }
+        });
+
         this.updatePlayRequestDisplay(); // 錯誤時也更新總播放/請求次數
 
         if (this.adsManager) {
@@ -642,8 +663,9 @@ class AdPlayer {
 
 // IndexedDB 相關工具函數
 const DB_NAME = 'AdPlayerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'settings';
+const LOG_STORE_NAME = 'logs';
 
 function openDatabase() {
     return new Promise((resolve, reject) => {
@@ -653,6 +675,10 @@ function openDatabase() {
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 db.createObjectStore(STORE_NAME);
+            }
+            if (!db.objectStoreNames.contains(LOG_STORE_NAME)) {
+                const logStore = db.createObjectStore(LOG_STORE_NAME, { autoIncrement: true });
+                logStore.createIndex('timestamp', 'timestamp', { unique: false });
             }
         };
 
@@ -689,8 +715,66 @@ async function loadSetting(key) {
     });
 }
 
+async function saveLog(logData) {
+    try {
+        const db = await openDatabase();
+        const transaction = db.transaction([LOG_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(LOG_STORE_NAME);
+        store.add({ ...logData, timestamp: new Date() });
+    } catch (error) {
+        console.error('Failed to save log to IndexedDB', error);
+    }
+}
+
+async function getLogs(limit = 100) {
+    const db = await openDatabase();
+    const transaction = db.transaction([LOG_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(LOG_STORE_NAME);
+    const index = store.index('timestamp');
+    const request = index.openCursor(null, 'prev');
+    const logs = [];
+
+    return new Promise((resolve, reject) => {
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor && logs.length < limit) {
+                logs.push(cursor.value);
+                cursor.continue();
+            } else {
+                resolve(logs);
+            }
+        };
+        request.onerror = (event) => {
+            console.error('Failed to get logs from IndexedDB', event.target.errorCode);
+            reject(event.target.errorCode);
+        };
+    });
+}
+
 // 當頁面載入完成後，啟動播放器
 window.addEventListener('load', () => {
     const player = new AdPlayer();
     player.init();
+
+    const showLogsButton = document.getElementById('show-logs-button');
+    const logViewerContainer = document.getElementById('log-viewer-container');
+    const closeLogsButton = document.getElementById('close-logs-button');
+    const logContent = document.getElementById('log-content');
+
+    showLogsButton.addEventListener('click', async () => {
+        try {
+            const logs = await getLogs(200); // 取得最近 200 筆日誌
+            logContent.textContent = logs.map(log => {
+                return `[${new Date(log.timestamp).toLocaleString()}] [${log.level.toUpperCase()}] ${log.message}`;
+            }).join('\n');
+            logViewerContainer.style.display = 'flex';
+        } catch (error) {
+            console.error('Failed to show logs:', error);
+            alert('無法顯示日誌，請查看 console。');
+        }
+    });
+
+    closeLogsButton.addEventListener('click', () => {
+        logViewerContainer.style.display = 'none';
+    });
 });
