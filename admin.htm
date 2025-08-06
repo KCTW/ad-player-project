@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>廣告播放器管理後台</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+        }
+        .container {
+            max-width: 960px;
+        }
+        .card-header {
+            font-weight: bold;
+        }
+        .log-line.error {
+            color: #dc3545;
+        }
+        .log-line.info {
+            color: #0d6efd;
+        }
+        .log-line.cache {
+            color: #6f42c1;
+        }
+        .log-content {
+            max-height: 400px;
+            overflow-y: scroll;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">廣告播放器管理後台</h1>
+
+        <!-- 統計數據 -->
+        <div class="card mb-4">
+            <div class="card-header">統計數據</div>
+            <div class="card-body">
+                <p>總播放次數: <span id="total-play-count">0</span></p>
+                <p>總請求次數: <span id="total-request-count">0</span></p>
+            </div>
+        </div>
+
+        <!-- VAST Endpoint 管理 -->
+        <div class="card mb-4">
+            <div class="card-header">VAST Endpoint 管理</div>
+            <div class="card-body">
+                <ul id="endpoint-list" class="list-group mb-3"></ul>
+                <div class="input-group mb-3">
+                    <input type="text" id="new-endpoint-name" class="form-control" placeholder="Endpoint 名稱">
+                    <input type="url" id="new-endpoint-url" class="form-control" placeholder="Endpoint URL">
+                    <button class="btn btn-primary" id="add-endpoint-btn">新增 Endpoint</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device ID 管理 -->
+        <div class="card mb-4">
+            <div class="card-header">Device ID 管理</div>
+            <div class="card-body">
+                <ul id="device-id-list" class="list-group mb-3"></ul>
+                <div class="input-group mb-3">
+                    <input type="text" id="new-device-id" class="form-control" placeholder="新的 Device ID">
+                    <button class="btn btn-primary" id="add-device-id-btn">新增 Device ID</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日誌檢視器 -->
+        <div class="card mb-4">
+            <div class="card-header">日誌檢視器</div>
+            <div class="card-body">
+                <button class="btn btn-danger mb-3" id="clear-logs-btn">清除所有日誌</button>
+                <div id="log-content" class="log-content"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Admin Panel JavaScript -->
+    <script type="module" src="js/admin.js"></script>
+</body>
+</html>

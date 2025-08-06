@@ -44,3 +44,10 @@ clearLogsButton.addEventListener('click', async () => {
 closeLogsButton.addEventListener('click', () => {
     logViewerContainer.style.display = 'none';
 });
+
+const adminPanelButton = document.getElementById('admin-panel-button');
+if (adminPanelButton) {
+    adminPanelButton.addEventListener('click', () => {
+        window.location.href = 'admin.htm';
+    });
+}
