@@ -51,19 +51,3 @@ if (adminPanelButton) {
         window.location.href = 'admin.htm';
     });
 }
-
-const debugModeToggle = document.getElementById('debug-mode-toggle');
-const debugUiContainer = document.getElementById('debug-ui-container');
-
-if (debugModeToggle && debugUiContainer) {
-    // Set initial state to hidden
-    debugUiContainer.style.display = 'none';
-
-    debugModeToggle.addEventListener('click', () => {
-        if (debugUiContainer.style.display === 'none') {
-            debugUiContainer.style.display = 'flex'; // Or 'block', depending on desired layout
-        } else {
-            debugUiContainer.style.display = 'none';
-        }
-    });
-}
