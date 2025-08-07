@@ -1,9 +1,15 @@
 import AdPlayer from './AdPlayer.js';
-import { getLogs, clearLogs } from './indexedDB.js';
+import { getLogs, clearLogs, cleanupOldMetrics } from './indexedDB.js';
 
+// 初始化播放器
 const player = new AdPlayer();
 player.init();
 window.player = player;
+
+// 應用程式啟動時，清理超過 7 天的舊監控數據
+document.addEventListener('DOMContentLoaded', () => {
+    cleanupOldMetrics(7);
+});
 
 const showLogsButton = document.getElementById('show-logs-button');
 const logViewerContainer = document.getElementById('log-viewer-container');

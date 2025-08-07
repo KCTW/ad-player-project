@@ -1,8 +1,9 @@
 // IndexedDB 相關工具函數
 const DB_NAME = 'AdPlayerDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3; // 版本升級
 const STORE_NAME = 'settings';
 const LOG_STORE_NAME = 'logs';
+const METRICS_STORE_NAME = 'metrics'; // 新增 metrics store
 
 function openDatabase() {
     return new Promise((resolve, reject) => {
@@ -16,6 +17,11 @@ function openDatabase() {
             if (!db.objectStoreNames.contains(LOG_STORE_NAME)) {
                 const logStore = db.createObjectStore(LOG_STORE_NAME, { autoIncrement: true });
                 logStore.createIndex('timestamp', 'timestamp', { unique: false });
+            }
+            // 新增 metrics store
+            if (!db.objectStoreNames.contains(METRICS_STORE_NAME)) {
+                const metricsStore = db.createObjectStore(METRICS_STORE_NAME, { autoIncrement: true });
+                metricsStore.createIndex('timestamp', 'timestamp', { unique: false });
             }
         };
 
@@ -127,4 +133,56 @@ async function clearLogs() {
     }
 }
 
-export { saveSetting, loadSetting, saveLog, getLogs, clearLogs };
+// 新增：儲存監控數據
+async function addMetric(metricData) {
+    try {
+        const db = await openDatabase();
+        const transaction = db.transaction([METRICS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(METRICS_STORE_NAME);
+        store.add({ ...metricData, timestamp: new Date().toISOString() });
+    } catch (error) {
+        console.error('Failed to save metric to IndexedDB', error);
+    }
+}
+
+// 新增：清理舊的監控數據
+async function cleanupOldMetrics(daysToKeep) {
+    try {
+        const db = await openDatabase();
+        const transaction = db.transaction([METRICS_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(METRICS_STORE_NAME);
+        const index = store.index('timestamp');
+        
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - daysToKeep);
+        const thresholdISO = threshold.toISOString();
+
+        const request = index.openCursor(IDBKeyRange.upperBound(thresholdISO));
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
+            if (cursor) {
+                cursor.delete();
+                cursor.continue();
+            }
+        };
+    } catch (error) {
+        console.error('Failed to cleanup old metrics from IndexedDB', error);
+    }
+}
+
+// 新增：獲取所有監控數據
+async function getMetrics() {
+    const db = await openDatabase();
+    const transaction = db.transaction([METRICS_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(METRICS_STORE_NAME);
+    const request = store.getAll();
+    return new Promise((resolve, reject) => {
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => {
+            console.error('Failed to get metrics from IndexedDB', event.target.errorCode);
+            reject(event.target.errorCode);
+        };
+    });
+}
+
+export { saveSetting, loadSetting, saveLog, getLogs, clearLogs, addMetric, cleanupOldMetrics, getMetrics };

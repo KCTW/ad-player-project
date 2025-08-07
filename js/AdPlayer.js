@@ -1,4 +1,4 @@
-import { saveSetting, loadSetting, saveLog } from './indexedDB.js';
+import { saveSetting, loadSetting, saveLog, addMetric } from './indexedDB.js';
 
 /**
  * 廣告播放器
@@ -114,10 +114,16 @@ class AdPlayer {
      * @param {string} message - 要顯示的訊息
      * @param {boolean} isError - 是否為錯誤訊息
      */
-    showNotification(message, isError = false, isCache = false) {
-        if (isError || this.logAllEvents) {
+    showNotification(message, notificationType = 'info') {
+        // 根據 notificationType 設定日誌級別
+        let logLevel = notificationType;
+        if (notificationType === 'cache-hit' || notificationType === 'network-load') {
+            logLevel = 'cache'; // 將快取相關的日誌歸類為 'cache' 級別
+        }
+
+        if (logLevel === 'error' || this.logAllEvents) {
             const logData = {
-                level: isError ? 'error' : (isCache ? 'cache' : 'info'),
+                level: logLevel,
                 message: message,
                 timestamp: new Date().toISOString()
             };
@@ -127,12 +133,17 @@ class AdPlayer {
         console.log(message); // 仍然在 console 中保留日誌
         const notification = document.createElement('div');
         notification.className = 'notification';
-        if (isError) {
+        
+        // 根據 notificationType 添加 CSS class
+        if (notificationType === 'error') {
             notification.classList.add('error');
+        } else if (notificationType === 'cache-hit') {
+            notification.classList.add('cache-hit');
+        } else if (notificationType === 'network-load') {
+            notification.classList.add('network-load');
         }
-        if (isCache) {
-            notification.classList.add('cache-info');
-        }
+        // 預設情況下，不添加額外的 class，使用 .notification 的基本樣式
+
         notification.textContent = message;
 
         this.notificationContainer.appendChild(notification);
@@ -170,9 +181,9 @@ class AdPlayer {
                             `標題: ${title}\n` +
                             `影片: ${mediaFile}`;
 
-            this.showNotification(summary);
+            this.showNotification(summary, 'info');
         } catch (e) {
-            this.showNotification("解析 VAST XML 摘要時出錯", true);
+            this.showNotification("解析 VAST XML 摘要時出錯", 'error');
         }
     }
 
@@ -180,7 +191,7 @@ class AdPlayer {
      * 初始化播放器
      */
     async init() {
-        this.showNotification("播放器初始化...");
+        this.showNotification("播放器初始化...", 'info');
         await this.loadSettings(); // 等待設定載入完成
         this.initImaSDK();
         this.playNextAd(); // 開始無限循環
@@ -222,12 +233,12 @@ class AdPlayer {
         }
 
         if (availableEndpoints.length === 0) {
-            this.showNotification("沒有可用的 Endpoint，請至少選擇一個。", true);
+            this.showNotification("沒有可用的 Endpoint，請至少選擇一個。", 'error');
             return null; // 返回 null，表示無法構建 URL
         }
 
         const randomEndpoint = availableEndpoints[Math.floor(Math.random() * availableEndpoints.length)];
-        this.showNotification(`本次使用 Endpoint: ${randomEndpoint.name}`);
+        this.showNotification(`本次使用 Endpoint: ${randomEndpoint.name}`, 'info');
 
         const url = new URL(randomEndpoint.url);
         const params = {
@@ -252,6 +263,11 @@ class AdPlayer {
         this.currentAdTagUrl = url.toString(); // 記錄當前請求的 URL
         this.totalRequestCount++; // 每次構建 URL 都視為一次請求
         this.updatePlayRequestDisplay(); // 更新顯示
+        addMetric({
+            type: 'AdRequest',
+            endpoint: randomEndpoint.name,
+            url: this.currentAdTagUrl
+        });
         return this.currentAdTagUrl;
     }
 
@@ -259,7 +275,7 @@ class AdPlayer {
      * 請求並播放下一個廣告
      */
     playNextAd() {
-        this.showNotification("準備播放下一則廣告...");
+        this.showNotification("準備播放下一則廣告...", 'info');
         // 重置預載與進度旗標
         this.isPreloadTriggered = false;
         this.lastReportedProgress = 0;
@@ -267,11 +283,11 @@ class AdPlayer {
         const adsRequest = new google.ima.AdsRequest();
 
         if (this.preloadedVastXml) {
-            this.showNotification("使用已預載的 VAST 資料播放。");
+            this.showNotification("使用已預載的 VAST 資料播放。", 'info');
             adsRequest.adsResponse = this.preloadedVastXml;
             this.preloadedVastXml = null; // 使用後清空
         } else {
-            this.showNotification("發出新的 VAST 請求。");
+            this.showNotification("發出新的 VAST 請求。", 'info');
             adsRequest.adTagUrl = this.buildVastUrl();
         }
         
@@ -284,7 +300,7 @@ class AdPlayer {
      * 採用 fetch API 非同步取得 VAST XML，不干擾當前播放
      */
     preloadNextAd() {
-        this.showNotification("開始預載下一則廣告的 VAST...");
+        this.showNotification("開始預載下一則廣告的 VAST...", 'info');
         const nextAdUrl = this.buildVastUrl();
 
         fetch(nextAdUrl)
@@ -300,19 +316,36 @@ class AdPlayer {
                 const adNodes = xmlDoc.querySelectorAll("Ad");
 
                 if (adNodes.length > 0) {
-                    this.showNotification("VAST 預載成功！");
+                    this.showNotification("VAST 預載成功！", 'info');
                     this.preloadedVastXml = vastXml;
                     this.displayVastSummary(vastXml);
+                    addMetric({
+                        type: 'PreloadResult',
+                        status: 'success',
+                        url: nextAdUrl
+                    });
                 } else {
-                    this.showNotification("VAST 預載失敗：沒有廣告內容。", true);
+                    this.showNotification("VAST 預載失敗：沒有廣告內容。", 'error');
                     this.preloadedVastXml = null; // 確保預載失敗時，狀態是乾淨的
+                    addMetric({
+                        type: 'PreloadResult',
+                        status: 'failure',
+                        reason: 'No ad content in VAST response',
+                        url: nextAdUrl
+                    });
                     // 觸發錯誤處理流程，而不是直接播放下一則廣告
                     this.onAdError({ getError: () => ({ getVastErrorCode: () => 303, getMessage: () => 'No ads VAST response after one or more Wrappers.' }) });
                 }
             })
             .catch(error => {
-                this.showNotification(`預載下一則 VAST 時發生錯誤: ${error}`, true);
+                this.showNotification(`預載下一則 VAST 時發生錯誤: ${error}`, 'error');
                 this.preloadedVastXml = null; // 確保預載失敗時，狀態是乾淨的
+                addMetric({
+                    type: 'PreloadResult',
+                    status: 'failure',
+                    reason: error.message,
+                    url: nextAdUrl
+                });
             });
     }
 
@@ -320,11 +353,15 @@ class AdPlayer {
      * AdsLoader 成功取得廣告後的回呼
      */
     onAdsManagerLoaded(adsManagerLoadedEvent) {
-        this.showNotification("AdsManager 已載入。");
+        this.showNotification("AdsManager 已載入。", 'info');
         // 成功載入，重設對應 Endpoint 的失敗計數器
         if (this.currentAdTagUrl) {
             this.endpointFailureCounts[this.currentAdTagUrl] = 0;
         }
+        addMetric({
+            type: 'AdLoad',
+            url: this.currentAdTagUrl
+        });
 
         this.adsManager = adsManagerLoadedEvent.getAdsManager(this.contentElement);
 
@@ -340,7 +377,7 @@ class AdPlayer {
             this.adsManager.init(window.innerWidth, window.innerHeight, google.ima.ViewMode.FULLSCREEN);
             this.adsManager.start();
         } catch (adError) {
-            this.showNotification(`AdsManager 啟動失敗: ${adError}`, true);
+            this.showNotification(`AdsManager 啟動失敗: ${adError}`, 'error');
             this.playNextAd(); // 發生錯誤，立即嘗試播放下一則
         }
     }
@@ -356,10 +393,15 @@ class AdPlayer {
             if (this.adLoadRetries > 0) {
                 message += ` (包含 ${this.adLoadRetries} 次錯誤重試)`;
             }
-            this.showNotification(message);
+            this.showNotification(message, 'info');
         }
         this.adLoadRetries = 0; // 成功播放，重設重試計數器
         this.totalPlayCount++; // 增加總播放次數
+        addMetric({
+            type: 'AdPlay',
+            url: this.currentAdTagUrl,
+            endpoint: this.VAST_ENDPOINTS.find(ep => ep.url === this.currentAdTagUrl.split('?')[0])?.name || '未知'
+        });
 
         // 更新十分鐘曝光歷史
         const now = new Date();
@@ -408,49 +450,38 @@ class AdPlayer {
                 resource.initiatorType === 'video' ||
                 (resource.name.endsWith('.mp4') || resource.name.endsWith('.webm') || resource.name.endsWith('.mov'))
             );
-            console.log("videoResources (原始):", videoResources); // 調試日誌
 
             if (videoResources.length > 0) {
-                const latestVideoResources = new Map(); // Map to store the latest resource for each base name
-
-                videoResources.forEach(resource => {
-                    const resourceBaseName = resource.name.split('?')[0];
-                    if (!latestVideoResources.has(resourceBaseName) || resource.responseEnd > latestVideoResources.get(resourceBaseName).responseEnd) {
-                        latestVideoResources.set(resourceBaseName, resource);
-                    }
+                // 找到 responseEnd 時間戳最大的那個資源
+                const latestVideoResource = videoResources.reduce((latest, current) => {
+                    return current.responseEnd > latest.responseEnd ? current : latest;
                 });
 
-                console.log("videoResources (過濾後):", Array.from(latestVideoResources.values())); // 調試日誌
+                const resourceBaseName = latestVideoResource.name.split('?')[0];
+                // 檢查是否已經報告過這個影片資源的快取狀態
+                if (this.reportedVideoResources.has(resourceBaseName)) {
+                    return; // 如果已經報告過，則跳過
+                }
 
-                latestVideoResources.forEach(resource => {
-                    const resourceBaseName = resource.name.split('?')[0]; // Re-calculate for consistency, though it's already the key
-                    // 檢查是否已經報告過這個影片資源的快取狀態
-                    if (this.reportedVideoResources.has(resourceBaseName)) {
-                        return; // 如果已經報告過，則跳過
-                    }
+                let cacheStatus = '未知';
+                let type = 'info';
+                if (latestVideoResource.deliveryType === 'cache') {
+                    cacheStatus = '快取命中'; // 更清晰的表達
+                    type = 'cache-hit';
+                } else {
+                    // 如果不是快取命中，則視為網路載入，因為 Google 資源的 transferSize 不可靠
+                    cacheStatus = '從網路載入';
+                    type = 'network-load';
+                }
 
-                    let cacheStatus = '未知';
-                    if (resource.deliveryType === 'cache') {
-                        cacheStatus = '已從瀏覽器快取載入';
-                    } else if (resource.transferSize > 0) {
-                        // 由於 Timing-Allow-Origin 已設定，transferSize > 0 表示實際網路傳輸
-                        cacheStatus = `從網路載入 (傳輸 ${resource.transferSize} bytes)`;
-                        if (resource.decodedBodySize && resource.decodedBodySize > resource.transferSize) {
-                            cacheStatus += ` (原始大小 ${resource.decodedBodySize} bytes)`;
-                        }
-                    } else {
-                        // transferSize === 0 但 deliveryType 不是 cache，可能是其他情況
-                        cacheStatus = '從網路載入 (傳輸 0 bytes) - 可能為特殊情況或錯誤';
-                    }
+                this.showNotification(`影片 ${latestVideoResource.name.substring(latestVideoResource.name.lastIndexOf('/') + 1)} (類型: ${latestVideoResource.initiatorType}): ${cacheStatus}`, type);
+                this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
 
-                    this.showNotification(`影片 ${resource.name.substring(resource.name.lastIndexOf('/') + 1)} (類型: ${resource.initiatorType}): ${cacheStatus}`, false, true);
-                    this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
-                });
             } else {
-                this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。");
+                this.showNotification("未偵測到影片資源或 Performance API 未提供詳細資訊。", 'info');
             }
         } else {
-            this.showNotification("瀏覽器不支援 Performance API 或 getEntriesByType('resource')，無法檢查快取使用情況。");
+            this.showNotification("瀏覽器不支援 Performance API 或 getEntriesByType('resource')，無法檢查快取使用情況。", 'info');
         }
     }
 
@@ -472,7 +503,7 @@ class AdPlayer {
 
         for (const point in milestones) {
             if (progressPercent >= point && this.lastReportedProgress < point) {
-                this.showNotification(`播放進度: ${milestones[point]}`);
+                this.showNotification(`播放進度: ${milestones[point]}`, 'info');
                 this.lastReportedProgress = parseInt(point, 10);
             }
         }
@@ -490,7 +521,7 @@ class AdPlayer {
      * 所有廣告播放完畢，準備進入下一輪循環
      */
     onAllAdsCompleted() {
-        this.showNotification("本則廣告播放完畢。");
+        this.showNotification("本則廣告播放完畢。", 'info');
         this.lastAdEndTime = Date.now(); // 記錄廣告結束時間
         this.updateExposureDisplay(); // 廣告播放結束時更新曝光率
         this.updatePlayRequestDisplay(); // 廣告播放結束時更新總播放/請求次數
@@ -518,19 +549,24 @@ class AdPlayer {
         const errorMessage = this.VAST_ERROR_MAP[errorCode] || error.getMessage();
 
         const fullMessage = `廣告錯誤 (Code: ${errorCode})\n${errorMessage}`;
-        this.showNotification(fullMessage, true);
+        this.showNotification(fullMessage, 'error');
 
         // Save detailed error log
+        const errorDetails = {
+            errorCode: errorCode,
+            errorMessage: errorMessage,
+            adTagUrl: adTagUrl,
+            retries: this.adLoadRetries,
+            failureCount: failureCount
+        };
         saveLog({
             level: 'error',
             message: 'VAST Error',
-            details: {
-                errorCode: errorCode,
-                errorMessage: errorMessage,
-                adTagUrl: adTagUrl,
-                retries: this.adLoadRetries,
-                failureCount: failureCount
-            }
+            details: errorDetails
+        });
+        addMetric({
+            type: 'AdError',
+            details: errorDetails
         });
 
         this.updatePlayRequestDisplay(); // 錯誤時也更新總播放/請求次數
@@ -544,7 +580,7 @@ class AdPlayer {
         const maxDelay = 10000; // 10秒最大延遲
         const delay = Math.min(baseDelay * failureCount, maxDelay);
 
-        this.showNotification(`Endpoint 連續失敗 ${failureCount} 次，本次延遲 ${delay / 1000} 秒後重試...`);
+        this.showNotification(`Endpoint 連續失敗 ${failureCount} 次，本次延遲 ${delay / 1000} 秒後重試...`, 'info');
         setTimeout(() => {
             this.playNextAd();
         }, delay);
@@ -630,7 +666,7 @@ class AdPlayer {
         select.value = this.customDeviceId; // 設定選單的預設值
         select.addEventListener('change', async (event) => {
             this.customDeviceId = event.target.value.trim();
-            this.showNotification(`Device ID 已設定為: ${this.customDeviceId || '預設'}`);
+            this.showNotification(`Device ID 已設定為: ${this.customDeviceId || '預設'}`, 'info');
             await saveSetting('customDeviceId', this.customDeviceId); // 儲存設定
             this.playNextAd(); // 重新啟動播放，以使用新的 Device ID
         });
@@ -644,7 +680,7 @@ class AdPlayer {
         input.style.marginTop = '5px';
         input.addEventListener('change', async (event) => {
             this.customDeviceId = event.target.value.trim();
-            this.showNotification(`Device ID 已設定為: ${this.customDeviceId || '預設'}`);
+            this.showNotification(`Device ID 已設定為: ${this.customDeviceId || '預設'}`, 'info');
             await saveSetting('customDeviceId', this.customDeviceId); // 儲存設定
             this.playNextAd(); // 重新啟動播放，以使用新的 Device ID
         });
@@ -670,7 +706,7 @@ class AdPlayer {
 
         checkbox.addEventListener('change', (event) => {
             this.logAllEvents = event.target.checked;
-            this.showNotification(`已切換為 ${this.logAllEvents ? '全部記錄' : '只記錄錯誤'} 模式`);
+            this.showNotification(`已切換為 ${this.logAllEvents ? '全部記錄' : '只記錄錯誤'} 模式`, 'info');
         });
 
         label.appendChild(checkbox);
@@ -712,7 +748,7 @@ class AdPlayer {
             const screenWidth = window.innerWidth;
             const screenHeight = window.innerHeight;
             this.adsManager.resize(screenWidth, screenHeight, google.ima.ViewMode.FULLSCREEN);
-            this.showNotification(`偵測到畫面旋轉，調整廣告尺寸為 ${screenWidth}x${screenHeight}`);
+            this.showNotification(`偵測到畫面旋轉，調整廣告尺寸為 ${screenWidth}x${screenHeight}`, 'info');
         }
     }
 }
