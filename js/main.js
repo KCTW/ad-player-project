@@ -51,3 +51,19 @@ if (adminPanelButton) {
         window.location.href = 'admin.htm';
     });
 }
+
+const debugModeToggle = document.getElementById('debug-mode-toggle');
+const debugUiContainer = document.getElementById('debug-ui-container');
+
+if (debugModeToggle && debugUiContainer) {
+    // 預設開啟除錯 UI
+    debugUiContainer.style.display = 'flex';
+
+    debugModeToggle.addEventListener('click', () => {
+        if (debugUiContainer.style.display === 'none') {
+            debugUiContainer.style.display = 'flex'; // 或 'block'，取決於所需的佈局
+        } else {
+            debugUiContainer.style.display = 'none';
+        }
+    });
+}
