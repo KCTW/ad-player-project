@@ -4,7 +4,7 @@
 
 ## 專案概覽
 
-本專案的核心是一個能夠播放 VAST (Video Ad Serving Template) 廣告的播放器。它不僅處理廣告的載入和播放，還包含了使用者設定管理、日誌記錄、以及響應式佈局等功能。
+本專案的核心是一個能夠播放 VAST (Video Ad Serving Template) 廣告的播放器。它不僅處理廣告的載入和播放，還包含了使用者設定管理、日誌記錄、以及響應式佈局等功能。管理後台提供了豐富的數據視覺化，包括廣告曝光率和快取命中率的詳細統計與趨勢分析。
 
 ## 專案結構
 
@@ -13,16 +13,19 @@
 ├── workflows/
 │   └── deploy.yml          # GitHub Actions 部署配置
 .gitignore                  # Git 忽略文件
+.gemini_project_memory.md   # Gemini 代理專案記憶文件
 package.json                # 專案依賴和腳本
 package-lock.json           # 依賴鎖定文件
 README.md                   # 專案說明文件
 node_modules/               # Node.js 模組 (由 npm 安裝)
 src/                        # 專案原始碼
 ├── index.htm               # 應用程式主頁面 (HTML 結構)
+├── admin.htm               # 管理後台頁面 (HTML 結構)
 ├── js/                     # JavaScript 模組
 │   ├── AdPlayer.js         # 核心廣告播放器邏輯
 │   ├── indexedDB.js        # IndexedDB 數據存儲工具
-│   └── main.js             # 應用程式入口點與 UI 互動邏輯
+│   ├── main.js             # 應用程式入口點與 UI 互動邏輯
+│   └── admin.js            # 管理後台邏輯
 └── css/                    # CSS 樣式表
     ├── base.css            # 基礎樣式
     ├── components.css      # UI 組件樣式
@@ -43,7 +46,9 @@ jest.setup.js               # Jest 測試設定
 *   **可配置的廣告來源**: 支援多個 VAST Endpoint，使用者可透過 UI 選擇廣告來源。
 *   **自訂 Device ID**: 允許使用者自訂設備 ID，方便測試和追蹤。
 *   **日誌記錄與檢視**: 將播放日誌儲存到瀏覽器的 IndexedDB，並提供前端日誌檢視器，方便調試。
-*   **曝光率追蹤**: 追蹤廣告曝光次數，提供數據分析基礎。
+*   **曝光率追蹤與分析**: 追蹤廣告曝光次數，並在管理後台提供總覽、以及分端點、每小時的趨勢圖與詳細數據表格，深入分析廣告表現。
+*   **快取命中率統計與分析**: 統計影片資源的快取命中率，並在管理後台提供總覽、以及分端點、每小時的趨勢圖與詳細數據表格，優化資源載入效能。
+*   **管理後台增強**: 提供豐富的數據視覺化介面，便於監控廣告播放狀態、效能指標及快取使用情況。
 *   **響應式設計**: 支援畫面旋轉時自動調整廣告尺寸，適應不同螢幕方向。
 *   **自動化測試**: 導入 Jest 和 Puppeteer 進行整合測試，確保核心功能和 UI 互動的穩定性。
 *   **GitHub Pages 部署**: 配置 GitHub Actions 自動部署專案到 GitHub Pages，方便線上預覽。
@@ -62,10 +67,15 @@ jest.setup.js               # Jest 測試設定
     npm install
     ```
 3.  **啟動開發伺服器**:
+    本專案使用 Python 內建的 HTTP 伺服器。請確保您的系統已安裝 Python 3。
     ```bash
-    npx http-server ./src -p 3000
+    python3 -m http.server 8080 --directory src &
     ```
-    然後在瀏覽器中開啟 `http://localhost:3000/index.htm`。
+    此命令會在背景啟動伺服器，並將 `src/` 目錄作為文件根目錄，監聽 8080 端口。
+
+4.  **訪問應用程式**:
+    *   主應用程式: 在瀏覽器中開啟 `http://localhost:8080/index.htm`
+    *   管理後台: 在瀏覽器中開啟 `http://localhost:8080/admin.htm`
 
 ### GitHub Pages 線上預覽
 
