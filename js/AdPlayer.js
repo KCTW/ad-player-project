@@ -82,6 +82,7 @@ class AdPlayer {
         this.adLoadRetries = 0; // 用於計算錯誤重試次數
         this.endpointFailureCounts = {}; // 追蹤每個 Endpoint 的連續失敗次數
         this.currentAdTagUrl = null; // 當前請求的 Ad Tag URL
+        this.currentEndpointName = null; // 新增：儲存當前使用的 Endpoint 名稱
 
         // 曝光率相關
         this.adStartTimestamps = []; // 儲存廣告開始播放的時間戳
@@ -115,11 +116,13 @@ class AdPlayer {
      * @param {boolean} isError - 是否為錯誤訊息
      */
     showNotification(message, notificationType = 'info') {
+        console.log(`[showNotification] 訊息: ${message}, 類型: ${notificationType}`); // 新增日誌
         // 根據 notificationType 設定日誌級別
         let logLevel = notificationType;
         if (notificationType === 'cache-hit' || notificationType === 'network-load') {
             logLevel = 'cache'; // 將快取相關的日誌歸類為 'cache' 級別
         }
+        console.log(`[showNotification] 日誌級別: ${logLevel}`); // 新增日誌
 
         if (logLevel === 'error' || this.logAllEvents) {
             const logData = {
@@ -238,7 +241,8 @@ class AdPlayer {
         }
 
         const randomEndpoint = availableEndpoints[Math.floor(Math.random() * availableEndpoints.length)];
-        this.showNotification(`本次使用 Endpoint: ${randomEndpoint.name}`, 'info');
+        this.currentEndpointName = randomEndpoint.name; // 儲存當前使用的 Endpoint 名稱
+        this.showNotification(`本次使用 Endpoint: ${this.currentEndpointName}`, 'info'); // 使用 this.currentEndpointName
 
         const url = new URL(randomEndpoint.url);
         const params = {
@@ -261,11 +265,12 @@ class AdPlayer {
         }
         
         this.currentAdTagUrl = url.toString(); // 記錄當前請求的 URL
+        console.log(`[buildVastUrl] 生成的 Ad Tag URL: ${this.currentAdTagUrl}, Endpoint: ${this.currentEndpointName}`); // 新增日誌
         this.totalRequestCount++; // 每次構建 URL 都視為一次請求
         this.updatePlayRequestDisplay(); // 更新顯示
         addMetric({
             type: 'AdRequest',
-            endpoint: randomEndpoint.name,
+            endpoint: this.currentEndpointName, // 使用 this.currentEndpointName
             url: this.currentAdTagUrl
         });
         return this.currentAdTagUrl;
@@ -322,7 +327,8 @@ class AdPlayer {
                     addMetric({
                         type: 'PreloadResult',
                         status: 'success',
-                        url: nextAdUrl
+                        url: nextAdUrl,
+                        endpoint: this.currentEndpointName // 使用 this.currentEndpointName
                     });
                 } else {
                     this.showNotification("VAST 預載失敗：沒有廣告內容。", 'error');
@@ -331,10 +337,11 @@ class AdPlayer {
                         type: 'PreloadResult',
                         status: 'failure',
                         reason: 'No ad content in VAST response',
-                        url: nextAdUrl
+                        url: nextAdUrl,
+                        endpoint: this.currentEndpointName // 使用 this.currentEndpointName
                     });
                     // 觸發錯誤處理流程，而不是直接播放下一則廣告
-                    this.onAdError({ getError: () => ({ getVastErrorCode: () => 303, getMessage: () => 'No ads VAST response after one or more Wrappers.' }) });
+                    this.onAdError({ getError: () => ({ getVastErrorCode: () => 303, getMessage: () => 'No ads VAST response after one or more Wrappers.' })});
                 }
             })
             .catch(error => {
@@ -344,7 +351,8 @@ class AdPlayer {
                     type: 'PreloadResult',
                     status: 'failure',
                     reason: error.message,
-                    url: nextAdUrl
+                    url: nextAdUrl,
+                    endpoint: this.currentEndpointName // 使用 this.currentEndpointName
                 });
             });
     }
@@ -360,7 +368,8 @@ class AdPlayer {
         }
         addMetric({
             type: 'AdLoad',
-            url: this.currentAdTagUrl
+            url: this.currentAdTagUrl,
+            endpoint: this.currentEndpointName // 使用 this.currentEndpointName
         });
 
         this.adsManager = adsManagerLoadedEvent.getAdsManager(this.contentElement);
@@ -386,6 +395,7 @@ class AdPlayer {
      * 廣告影片真正開始播放時觸發
      */
     onAdStarted() {
+        console.log("[onAdStarted] 廣告開始播放，清空 reportedVideoResources。"); // 新增日誌
         this.reportedVideoResources.clear(); // 清空已報告的影片資源，確保每次廣告播放都重新檢查
         if (this.lastAdEndTime > 0) {
             const interval = (Date.now() - this.lastAdEndTime) / 1000;
@@ -400,7 +410,7 @@ class AdPlayer {
         addMetric({
             type: 'AdPlay',
             url: this.currentAdTagUrl,
-            endpoint: this.VAST_ENDPOINTS.find(ep => ep.url === this.currentAdTagUrl.split('?')[0])?.name || '未知'
+            endpoint: this.currentEndpointName // 使用 this.currentEndpointName
         });
 
         // 更新十分鐘曝光歷史
@@ -431,6 +441,7 @@ class AdPlayer {
         this.updateExposureDisplay(); // 更新曝光率顯示
         this.updatePlayRequestDisplay(); // 更新總播放/請求次數顯示
         // 延遲檢查媒體快取使用情況，給瀏覽器一些時間更新 Performance API 數據
+        console.log("[onAdStarted] 設定延遲檢查媒體快取使用情況。"); // 新增日誌
         setTimeout(() => {
             this.checkMediaCacheUsage();
         }, 500); // 延遲 500 毫秒
@@ -444,6 +455,7 @@ class AdPlayer {
      * deliveryType 屬性可明確指示資源是否從快取載入。
      */
     checkMediaCacheUsage() {
+        console.log("[checkMediaCacheUsage] 進入 checkMediaCacheUsage 函數。"); // 新增日誌
         if (window.performance && window.performance.getEntriesByType) {
             const resources = window.performance.getEntriesByType('resource');
             const videoResources = resources.filter(resource =>
@@ -456,10 +468,13 @@ class AdPlayer {
                 const latestVideoResource = videoResources.reduce((latest, current) => {
                     return current.responseEnd > latest.responseEnd ? current : latest;
                 });
+                console.log("[checkMediaCacheUsage] 找到最新的影片資源:", latestVideoResource.name, "deliveryType:", latestVideoResource.deliveryType); // 新增日誌
 
                 const resourceBaseName = latestVideoResource.name.split('?')[0];
+                console.log("[checkMediaCacheUsage] resourceBaseName:", resourceBaseName, "reportedVideoResources:", this.reportedVideoResources); // 新增日誌
                 // 檢查是否已經報告過這個影片資源的快取狀態
                 if (this.reportedVideoResources.has(resourceBaseName)) {
+                    console.log("[checkMediaCacheUsage] 影片資源已報告過，跳過。"); // 新增日誌
                     return; // 如果已經報告過，則跳過
                 }
 
@@ -468,18 +483,34 @@ class AdPlayer {
                 if (latestVideoResource.deliveryType === 'cache') {
                     cacheStatus = '快取命中'; // 更清晰的表達
                     type = 'cache-hit';
+                    addMetric({
+                        type: 'CacheEvent',
+                        status: 'hit',
+                        resource: resourceBaseName,
+                        endpoint: this.currentEndpointName
+                    });
                 } else {
                     // 如果不是快取命中，則視為網路載入，因為 Google 資源的 transferSize 不可靠
                     cacheStatus = '從網路載入';
                     type = 'network-load';
+                    addMetric({
+                        type: 'CacheEvent',
+                        status: 'miss',
+                        resource: resourceBaseName,
+                        endpoint: this.currentEndpointName
+                    });
                 }
 
                 // 嘗試從 VAST_ENDPOINTS 中找到對應的端點名稱
-                const videoBaseUrl = latestVideoResource.name.split('?')[0];
-                const matchedEndpoint = this.VAST_ENDPOINTS.find(ep => videoBaseUrl.startsWith(ep.url));
-                const endpointInfo = matchedEndpoint ? ` (端點: ${matchedEndpoint.name})` : '';
+                // 注意：這裡的邏輯可能需要調整，因為 videoBaseUrl 不一定直接對應 VAST_ENDPOINTS 的 url
+                // VAST_ENDPOINTS 的 url 是 VAST XML 的來源，而 videoBaseUrl 是實際影片的來源
+                // 更好的做法是在 buildVastUrl 時就儲存當前選定的 Endpoint 名稱，並在 AdPlayer 實例中維護
+                // 這裡我們已經在 buildVastUrl 中儲存了 this.currentEndpointName
+                const endpointInfo = this.currentEndpointName ? ` (端點: ${this.currentEndpointName})` : ''; // 使用 this.currentEndpointName
 
-                this.showNotification(`影片 ${latestVideoResource.name.substring(latestVideoResource.name.lastIndexOf('/') + 1)} (類型: ${latestVideoResource.initiatorType})${endpointInfo}: ${cacheStatus}`, type);
+                const message = `影片 ${latestVideoResource.name.substring(latestVideoResource.name.lastIndexOf('/') + 1)} (類型: ${latestVideoResource.initiatorType})${endpointInfo}: ${cacheStatus}`;
+                console.log(`[checkMediaCacheUsage] 準備顯示通知: ${message}, 類型: ${type}`); // 新增日誌
+                this.showNotification(message, type);
                 this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
 
             } else {
@@ -548,6 +579,7 @@ class AdPlayer {
             this.endpointFailureCounts[adTagUrl] = (this.endpointFailureCounts[adTagUrl] || 0) + 1;
         }
         const failureCount = this.endpointFailureCounts[adTagUrl] || 1;
+        console.log(`[onAdError] 廣告錯誤，Ad Tag URL: ${adTagUrl}, 連續失敗次數: ${failureCount}`); // 新增日誌
 
         const error = adErrorEvent.getError();
         const errorCode = error.getVastErrorCode();
@@ -562,7 +594,8 @@ class AdPlayer {
             errorMessage: errorMessage,
             adTagUrl: adTagUrl,
             retries: this.adLoadRetries,
-            failureCount: failureCount
+            failureCount: failureCount,
+            endpoint: this.currentEndpointName // 使用 this.currentEndpointName
         };
         saveLog({
             level: 'error',
@@ -571,7 +604,8 @@ class AdPlayer {
         });
         addMetric({
             type: 'AdError',
-            details: errorDetails
+            details: errorDetails,
+            endpoint: this.currentEndpointName // 使用 this.currentEndpointName
         });
 
         this.updatePlayRequestDisplay(); // 錯誤時也更新總播放/請求次數

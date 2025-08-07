@@ -9,6 +9,7 @@ let customDeviceIds = [];
 // DOM 元素
 const totalPlayCountElement = document.getElementById('total-play-count');
 const totalRequestCountElement = document.getElementById('total-request-count');
+const cacheHitRateElement = document.getElementById('cache-hit-rate');
 const endpointList = document.getElementById('endpoint-list');
 const newEndpointNameInput = document.getElementById('new-endpoint-name');
 const newEndpointUrlInput = document.getElementById('new-endpoint-url');
@@ -19,8 +20,8 @@ const addDeviceIdBtn = document.getElementById('add-device-id-btn');
 const clearLogsBtn = document.getElementById('clear-logs-btn');
 const logContentDiv = document.getElementById('log-content');
 const metricsChartCanvasOverall = document.getElementById('metrics-chart-overall'); // 總覽圖的 canvas
-const endpointExposureRatesDiv = document.getElementById('endpoint-exposure-rates');
 const endpointChartsContainer = document.getElementById('endpoint-charts-container'); // 各 Endpoint 圖表的容器
+const cacheChartsContainer = document.getElementById('cache-charts-container'); // 各 Endpoint 快取命中率圖表的容器
 
 async function initAdminPanel() {
     await loadAdminSettings();
@@ -30,8 +31,9 @@ async function initAdminPanel() {
     const metrics = await getMetrics();
     renderStats(metrics);
     renderOverallMetricsChart(metrics); // 渲染總覽圖
-    renderEndpointExposureRates(metrics);
     renderEndpointCharts(metrics); // 渲染各 Endpoint 圖表
+    renderCacheHitRate(metrics);
+    renderEndpointCacheCharts(metrics);
 
     addEndpointBtn.addEventListener('click', addEndpoint);
     addDeviceIdBtn.addEventListener('click', addDeviceId);
@@ -340,11 +342,40 @@ function renderEndpointCharts(metrics) {
         // 創建卡片和 canvas
         const cardDiv = document.createElement('div');
         cardDiv.className = 'card mb-4';
+        let tableHtml = `<div class="card-body mt-3">
+            <h5>${endpointName} - 每小時數據表格</h5>
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>時間</th>
+                        <th>請求</th>
+                        <th>播放</th>
+                        <th>錯誤</th>
+                        <th>曝光率 (%)</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        labels.forEach((label, index) => {
+            tableHtml += `
+                    <tr>
+                        <td>${label}</td>
+                        <td>${requestData[index]}</td>
+                        <td>${playData[index]}</td>
+                        <td>${errorData[index]}</td>
+                        <td>${exposureRateData[index].toFixed(2)}%</td>
+                    </tr>`;
+        });
+        tableHtml += `
+                </tbody>
+            </table>
+        </div>`;
+
         cardDiv.innerHTML = `
             <div class="card-header">${endpointName} - 每小時廣告事件趨勢與曝光率</div>
             <div class="card-body">
                 <canvas id="metrics-chart-${endpointName.replace(/[^a-zA-Z0-9]/g, '')}"></canvas>
             </div>
+            ${tableHtml}
         `;
         endpointChartsContainer.appendChild(cardDiv);
 
@@ -353,38 +384,179 @@ function renderEndpointCharts(metrics) {
     });
 }
 
-function renderEndpointExposureRates(metrics) {
-    const endpointStats = {};
+function renderCacheHitRate(metrics) {
+    const cacheEvents = metrics.filter(m => m.type === 'CacheEvent');
+    const totalCacheEvents = cacheEvents.length;
+    const cacheHits = cacheEvents.filter(m => m.status === 'hit').length;
 
-    metrics.forEach(metric => {
-        if (metric.type === 'AdRequest' || metric.type === 'AdPlay') {
-            const endpointName = metric.endpoint || '未知';
-            if (!endpointStats[endpointName]) {
-                endpointStats[endpointName] = { requests: 0, plays: 0 };
-            }
-            if (metric.type === 'AdRequest') {
-                endpointStats[endpointName].requests++;
-            } else if (metric.type === 'AdPlay') {
-                endpointStats[endpointName].plays++;
-            }
-        }
-    });
-
-    let html = '<table class="table table-striped table-sm"><thead><tr><th>Endpoint</th><th>請求次數</th><th>播放次數</th><th>曝光率</th></tr></thead><tbody>';
-    for (const endpointName in endpointStats) {
-        const stats = endpointStats[endpointName];
-        const exposureRate = stats.requests > 0 ? ((stats.plays / stats.requests) * 100).toFixed(2) : 0;
-        html += `
-            <tr>
-                <td>${endpointName}</td>
-                <td>${stats.requests}</td>
-                <td>${stats.plays}</td>
-                <td>${exposureRate}%</td>
-            </tr>
-        `;
+    let hitRate = 0;
+    if (totalCacheEvents > 0) {
+        hitRate = (cacheHits / totalCacheEvents) * 100;
     }
-    html += '</tbody></table>';
-    endpointExposureRatesDiv.innerHTML = html;
+
+    if (cacheHitRateElement) {
+        cacheHitRateElement.textContent = `${hitRate.toFixed(2)}% (${cacheHits}/${totalCacheEvents})`;
+    }
+}
+
+function renderEndpointCacheCharts(metrics) {
+    if (!cacheChartsContainer) return; // 確保容器存在
+
+    cacheChartsContainer.innerHTML = ''; // 清空現有內容
+
+    const cacheEvents = metrics.filter(m => m.type === 'CacheEvent');
+    const uniqueEndpoints = [...new Set(cacheEvents.map(m => m.endpoint))].filter(e => e !== undefined && e !== null);
+
+    uniqueEndpoints.forEach(endpointName => {
+        const endpointCacheEvents = cacheEvents.filter(m => m.endpoint === endpointName);
+
+        if (endpointCacheEvents.length === 0) return; // 如果沒有該 Endpoint 的數據，則跳過
+
+        // 按小時匯總數據
+        const hourlyData = endpointCacheEvents.reduce((acc, metric) => {
+            const hour = new Date(metric.timestamp).getHours();
+            const day = new Date(metric.timestamp).toLocaleDateString();
+            const key = `${day} ${hour}:00`;
+
+            if (!acc[key]) {
+                acc[key] = {
+                    hits: 0,
+                    misses: 0,
+                };
+            }
+
+            if (metric.status === 'hit') acc[key].hits++;
+            if (metric.status === 'miss') acc[key].misses++;
+
+            return acc;
+        }, {});
+
+        // 計算每小時的快取命中率
+        Object.keys(hourlyData).forEach(key => {
+            const data = hourlyData[key];
+            const total = data.hits + data.misses;
+            data.hitRate = total > 0 ? (data.hits / total) * 100 : 0;
+        });
+
+        const labels = Object.keys(hourlyData).sort();
+        const hitData = labels.map(label => hourlyData[label].hits);
+        const missData = labels.map(label => hourlyData[label].misses);
+        const hitRateData = labels.map(label => hourlyData[label].hitRate);
+
+        // 創建卡片和 canvas
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'card mb-4';
+        let tableHtml = `<div class="card-body mt-3">
+            <h5>${endpointName} - 每小時快取數據表格</h5>
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>時間</th>
+                        <th>命中</th>
+                        <th>未命中</th>
+                        <th>命中率 (%)</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        labels.forEach((label, index) => {
+            tableHtml += `
+                    <tr>
+                        <td>${label}</td>
+                        <td>${hitData[index]}</td>
+                        <td>${missData[index]}</td>
+                        <td>${hitRateData[index].toFixed(2)}%</td>
+                    </tr>`;
+        });
+        tableHtml += `
+                </tbody>
+            </table>
+        </div>`;
+
+        cardDiv.innerHTML = `
+            <div class="card-header">${endpointName} - 每小時快取命中率趨勢</div>
+            <div class="card-body">
+                <canvas id="cache-chart-${endpointName.replace(/[^a-zA-Z0-9]/g, '')}"></canvas>
+            </div>
+            ${tableHtml}
+        `;
+        cacheChartsContainer.appendChild(cardDiv);
+
+        new Chart(cardDiv.querySelector('canvas'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '快取命中 (Cache Hit)',
+                        data: hitData,
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                        label: '快取未命中 (Cache Miss)',
+                        data: missData,
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    },
+                    {
+                        label: '命中率 (%)',
+                        data: hitRateData,
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        fill: true,
+                        tension: 0.1,
+                        yAxisID: 'y1' // 使用新的 Y 軸
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: `${endpointName} - 每小時快取命中率趨勢`
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: '次數'
+                        }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: {
+                            drawOnChartArea: false, // 只繪製左側 Y 軸的網格線
+                        },
+                        title: {
+                            display: true,
+                            text: '命中率 (%)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
 }
 
 // 初始化管理面板
