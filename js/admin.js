@@ -18,8 +18,9 @@ const newDeviceIdInput = document.getElementById('new-device-id');
 const addDeviceIdBtn = document.getElementById('add-device-id-btn');
 const clearLogsBtn = document.getElementById('clear-logs-btn');
 const logContentDiv = document.getElementById('log-content');
-const metricsChartCanvas = document.getElementById('metrics-chart');
+const metricsChartCanvasOverall = document.getElementById('metrics-chart-overall'); // 總覽圖的 canvas
 const endpointExposureRatesDiv = document.getElementById('endpoint-exposure-rates');
+const endpointChartsContainer = document.getElementById('endpoint-charts-container'); // 各 Endpoint 圖表的容器
 
 async function initAdminPanel() {
     await loadAdminSettings();
@@ -28,8 +29,9 @@ async function initAdminPanel() {
     await renderLogs();
     const metrics = await getMetrics();
     renderStats(metrics);
-    renderMetricsChart(metrics);
+    renderOverallMetricsChart(metrics); // 渲染總覽圖
     renderEndpointExposureRates(metrics);
+    renderEndpointCharts(metrics); // 渲染各 Endpoint 圖表
 
     addEndpointBtn.addEventListener('click', addEndpoint);
     addDeviceIdBtn.addEventListener('click', addDeviceId);
@@ -157,47 +159,9 @@ function renderStats(metrics) {
     totalRequestCountElement.textContent = totalRequestCount;
 }
 
-function renderMetricsChart(metrics) {
-    if (!metrics || metrics.length === 0) {
-        metricsChartCanvas.getContext('2d').fillText("沒有足夠的數據來生成圖表。", 10, 50);
-        return;
-    }
-
-    // 按小時匯總數據
-    const hourlyData = metrics.reduce((acc, metric) => {
-        const hour = new Date(metric.timestamp).getHours();
-        const day = new Date(metric.timestamp).toLocaleDateString();
-        const key = `${day} ${hour}:00`;
-
-        if (!acc[key]) {
-            acc[key] = {
-                requests: 0,
-                plays: 0,
-                errors: 0,
-                exposureRate: 0
-            };
-        }
-
-        if (metric.type === 'AdRequest') acc[key].requests++;
-        if (metric.type === 'AdPlay') acc[key].plays++;
-        if (metric.type === 'AdError') acc[key].errors++;
-
-        return acc;
-    }, {});
-
-    // 計算每小時的曝光率
-    Object.keys(hourlyData).forEach(key => {
-        const data = hourlyData[key];
-        data.exposureRate = data.requests > 0 ? (data.plays / data.requests) * 100 : 0;
-    });
-
-    const labels = Object.keys(hourlyData).sort();
-    const requestData = labels.map(label => hourlyData[label].requests);
-    const playData = labels.map(label => hourlyData[label].plays);
-    const errorData = labels.map(label => hourlyData[label].errors);
-    const exposureRateData = labels.map(label => hourlyData[label].exposureRate);
-
-    new Chart(metricsChartCanvas, {
+// 輔助函數：創建並渲染圖表
+function createChart(canvasElement, labels, requestData, playData, errorData, exposureRateData, titleText) {
+    new Chart(canvasElement, {
         type: 'line',
         data: {
             labels: labels,
@@ -245,7 +209,7 @@ function renderMetricsChart(metrics) {
                 },
                 title: {
                     display: true,
-                    text: '每小時廣告事件趨勢與曝光率'
+                    text: titleText
                 }
             },
             scales: {
@@ -279,6 +243,113 @@ function renderMetricsChart(metrics) {
                 }
             }
         }
+    });
+}
+
+// 渲染總覽圖
+function renderOverallMetricsChart(metrics) {
+    if (!metricsChartCanvasOverall) return; // 確保元素存在
+
+    if (!metrics || metrics.length === 0) {
+        metricsChartCanvasOverall.getContext('2d').fillText("沒有足夠的數據來生成總覽圖。", 10, 50);
+        return;
+    }
+
+    // 按小時匯總數據
+    const hourlyData = metrics.reduce((acc, metric) => {
+        const hour = new Date(metric.timestamp).getHours();
+        const day = new Date(metric.timestamp).toLocaleDateString();
+        const key = `${day} ${hour}:00`;
+
+        if (!acc[key]) {
+            acc[key] = {
+                requests: 0,
+                plays: 0,
+                errors: 0,
+            };
+        }
+
+        if (metric.type === 'AdRequest') acc[key].requests++;
+        if (metric.type === 'AdPlay') acc[key].plays++;
+        if (metric.type === 'AdError') acc[key].errors++;
+
+        return acc;
+    }, {});
+
+    // 計算每小時的曝光率
+    Object.keys(hourlyData).forEach(key => {
+        const data = hourlyData[key];
+        data.exposureRate = data.requests > 0 ? (data.plays / data.requests) * 100 : 0;
+    });
+
+    const labels = Object.keys(hourlyData).sort();
+    const requestData = labels.map(label => hourlyData[label].requests);
+    const playData = labels.map(label => hourlyData[label].plays);
+    const errorData = labels.map(label => hourlyData[label].errors);
+    const exposureRateData = labels.map(label => hourlyData[label].exposureRate);
+
+    createChart(metricsChartCanvasOverall, labels, requestData, playData, errorData, exposureRateData, '每小時廣告事件趨勢與曝光率 (總覽)');
+}
+
+// 渲染各 Endpoint 的趨勢圖
+function renderEndpointCharts(metrics) {
+    if (!endpointChartsContainer) return; // 確保容器存在
+
+    endpointChartsContainer.innerHTML = ''; // 清空現有內容
+
+    const uniqueEndpoints = [...new Set(metrics.map(m => m.endpoint))].filter(e => e !== undefined && e !== null);
+
+    uniqueEndpoints.forEach(endpointName => {
+        const endpointMetrics = metrics.filter(m => m.endpoint === endpointName);
+
+        if (endpointMetrics.length === 0) return; // 如果沒有該 Endpoint 的數據，則跳過
+
+        // 按小時匯總數據
+        const hourlyData = endpointMetrics.reduce((acc, metric) => {
+            const hour = new Date(metric.timestamp).getHours();
+            const day = new Date(metric.timestamp).toLocaleDateString();
+            const key = `${day} ${hour}:00`;
+
+            if (!acc[key]) {
+                acc[key] = {
+                    requests: 0,
+                    plays: 0,
+                    errors: 0,
+                };
+            }
+
+            if (metric.type === 'AdRequest') acc[key].requests++;
+            if (metric.type === 'AdPlay') acc[key].plays++;
+            if (metric.type === 'AdError') acc[key].errors++;
+
+            return acc;
+        }, {});
+
+        // 計算每小時的曝光率
+        Object.keys(hourlyData).forEach(key => {
+            const data = hourlyData[key];
+            data.exposureRate = data.requests > 0 ? (data.plays / data.requests) * 100 : 0;
+        });
+
+        const labels = Object.keys(hourlyData).sort();
+        const requestData = labels.map(label => hourlyData[label].requests);
+        const playData = labels.map(label => hourlyData[label].plays);
+        const errorData = labels.map(label => hourlyData[label].errors);
+        const exposureRateData = labels.map(label => hourlyData[label].exposureRate);
+
+        // 創建卡片和 canvas
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'card mb-4';
+        cardDiv.innerHTML = `
+            <div class="card-header">${endpointName} - 每小時廣告事件趨勢與曝光率</div>
+            <div class="card-body">
+                <canvas id="metrics-chart-${endpointName.replace(/[^a-zA-Z0-9]/g, '')}"></canvas>
+            </div>
+        `;
+        endpointChartsContainer.appendChild(cardDiv);
+
+        const canvasElement = cardDiv.querySelector('canvas');
+        createChart(canvasElement, labels, requestData, playData, errorData, exposureRateData, `${endpointName} - 每小時廣告事件趨勢與曝光率`);
     });
 }
 
