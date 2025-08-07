@@ -24,6 +24,14 @@ describe('AdPlayer Integration Tests', () => {
 
     // Wait for the AdPlayer to be initialized
     await page.waitForFunction(() => window.player !== undefined);
+
+    // Make the debug UI visible for testing
+    await page.evaluate(() => {
+      const debugUiContainer = document.getElementById('debug-ui-container');
+      if (debugUiContainer) {
+        debugUiContainer.style.display = 'flex';
+      }
+    });
   });
 
   afterAll(async () => {
@@ -55,43 +63,65 @@ describe('AdPlayer Integration Tests', () => {
   });
 
   test('Endpoint selection should update and save setting', async () => {
-    // Wait for the endpoint selection container and its checkbox to be rendered
-    await page.waitForSelector('#endpoint-selection-container input[type="checkbox"]');
+    // Wait for the endpoint selection container and its checkbox to be rendered and clickable
+    const checkboxSelector = '#endpoint-selection-container input[type="checkbox"]';
+    await page.waitForSelector(checkboxSelector, { visible: true });
+    await page.waitForFunction(selector => {
+      const el = document.querySelector(selector);
+      return el && !el.disabled && el.offsetWidth > 0 && el.offsetHeight > 0;
+    }, {}, checkboxSelector);
 
     // Click on the first checkbox
-    await page.click('#endpoint-selection-container input[type="checkbox"]');
+    await page.click(checkboxSelector);
 
     // Verify that the checkbox is checked
-    const isChecked = await page.$eval('#endpoint-selection-container input[type="checkbox"]', checkbox => checkbox.checked);
+    const isChecked = await page.$eval(checkboxSelector, checkbox => checkbox.checked);
     expect(isChecked).toBe(true);
   });
 
   test('Device ID input should update and save setting', async () => {
-    await page.waitForSelector('#device-id-input-container input[type="text"]');
+    const inputSelector = '#device-id-input-container input[type="text"]';
+    await page.waitForSelector(inputSelector, { visible: true });
 
     const testDeviceId = 'TEST_DEVICE_ID';
-    await page.type('#device-id-input-container input[type="text"]', testDeviceId);
+    await page.type(inputSelector, testDeviceId);
 
     // Trigger change event
-    await page.$eval('#device-id-input-container input[type="text"]', el => el.dispatchEvent(new Event('change')));
+    await page.$eval(inputSelector, el => el.dispatchEvent(new Event('change')));
 
-    const inputValue = await page.$eval('#device-id-input-container input[type="text"]', input => input.value);
+    // Wait for the input value to be updated
+    await page.waitForFunction((selector, expectedValue) => {
+      const el = document.querySelector(selector);
+      return el && el.value === expectedValue;
+    }, {}, inputSelector, testDeviceId);
+
+    const inputValue = await page.$eval(inputSelector, input => input.value);
     expect(inputValue).toBe(testDeviceId);
   });
 
   test('Log toggle should update', async () => {
-    await page.waitForSelector('#log-toggle-container input[type="checkbox"]');
+    const checkboxSelector = '#log-toggle-container input[type="checkbox"]';
+    await page.waitForSelector(checkboxSelector, { visible: true });
+    await page.waitForFunction(selector => {
+      const el = document.querySelector(selector);
+      return el && !el.disabled && el.offsetWidth > 0 && el.offsetHeight > 0;
+    }, {}, checkboxSelector);
 
-    const checkbox = await page.$('#log-toggle-container input[type="checkbox"]');
+    const checkbox = await page.$(checkboxSelector);
     await checkbox.click();
 
-    const isChecked = await page.$eval('#log-toggle-container input[type="checkbox"]', cb => cb.checked);
+    const isChecked = await page.$eval(checkboxSelector, cb => cb.checked);
     expect(isChecked).toBe(true);
   });
 
   test('Show logs button should open log viewer', async () => {
-    await page.waitForSelector('#show-logs-button');
-    await page.click('#show-logs-button');
+    const buttonSelector = '#show-logs-button';
+    await page.waitForSelector(buttonSelector, { visible: true });
+    await page.waitForFunction(selector => {
+      const el = document.querySelector(selector);
+      return el && !el.disabled && el.offsetWidth > 0 && el.offsetHeight > 0;
+    }, {}, buttonSelector);
+    await page.click(buttonSelector);
     // Wait for the display style to change to flex
     await page.waitForFunction(
       selector => document.querySelector(selector) && getComputedStyle(document.querySelector(selector)).display === 'flex',
@@ -103,8 +133,13 @@ describe('AdPlayer Integration Tests', () => {
   });
 
   test('Close logs button should close log viewer', async () => {
-    await page.waitForSelector('#close-logs-button');
-    await page.click('#close-logs-button');
+    const buttonSelector = '#close-logs-button';
+    await page.waitForSelector(buttonSelector, { visible: true });
+    await page.waitForFunction(selector => {
+      const el = document.querySelector(selector);
+      return el && !el.disabled && el.offsetWidth > 0 && el.offsetHeight > 0;
+    }, {}, buttonSelector);
+    await page.click(buttonSelector);
     // Wait for the display style to change to none
     await page.waitForFunction(
       selector => document.querySelector(selector) && getComputedStyle(document.querySelector(selector)).display === 'none',

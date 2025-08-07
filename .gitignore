@@ -4,3 +4,9 @@
 # Temporary files
 C:UsersP10395571Desktoptest_modified
 debug_player.js
+
+# Gemini project memory file
+/.gemini_project_memory.md
+
+# Log files
+*.log
