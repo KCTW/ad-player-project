@@ -49,16 +49,11 @@
             <div class="card-body">
                 <p>總播放次數: <span id="total-play-count">0</span></p>
                 <p>總請求次數: <span id="total-request-count">0</span></p>
+                <p>快取命中率: <span id="cache-hit-rate">0% (0/0)</span></p>
             </div>
         </div>
 
-        <!-- Endpoint 曝光率 -->
-        <div class="card mb-4">
-            <div class="card-header">Endpoint 曝光率</div>
-            <div class="card-body">
-                <div id="endpoint-exposure-rates"></div>
-            </div>
-        </div>
+        
 
         <!-- 趨勢圖 -->
         <div class="card mb-4">
@@ -70,6 +65,9 @@
 
         <!-- 各 Endpoint 趨勢圖容器 -->
         <div id="endpoint-charts-container"></div>
+
+        <!-- 各 Endpoint 快取命中率趨勢圖容器 -->
+        <div id="cache-charts-container"></div>
 
         <!-- VAST Endpoint 管理 -->
         <div class="card mb-4">
