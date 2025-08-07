@@ -1,4 +1,4 @@
-import { loadSetting, saveSetting, getLogs, clearLogs } from './indexedDB.js';
+import { loadSetting, saveSetting, getLogs, clearLogs, getMetrics } from './indexedDB.js';
 
 const ENDPOINT_SETTINGS_KEY = 'VAST_ENDPOINTS';
 const DEVICE_ID_SETTINGS_KEY = 'CUSTOM_DEVICE_IDS';
@@ -18,13 +18,18 @@ const newDeviceIdInput = document.getElementById('new-device-id');
 const addDeviceIdBtn = document.getElementById('add-device-id-btn');
 const clearLogsBtn = document.getElementById('clear-logs-btn');
 const logContentDiv = document.getElementById('log-content');
+const metricsChartCanvas = document.getElementById('metrics-chart');
+const endpointExposureRatesDiv = document.getElementById('endpoint-exposure-rates');
 
 async function initAdminPanel() {
     await loadAdminSettings();
     renderEndpoints();
     renderDeviceIds();
     await renderLogs();
-    await renderStats();
+    const metrics = await getMetrics();
+    renderStats(metrics);
+    renderMetricsChart(metrics);
+    renderEndpointExposureRates(metrics);
 
     addEndpointBtn.addEventListener('click', addEndpoint);
     addDeviceIdBtn.addEventListener('click', addDeviceId);
@@ -145,11 +150,170 @@ async function clearAllLogs() {
     }
 }
 
-async function renderStats() {
-    const totalPlayCount = (await loadSetting('totalPlayCount')) || 0;
-    const totalRequestCount = (await loadSetting('totalRequestCount')) || 0;
+function renderStats(metrics) {
+    const totalPlayCount = metrics.filter(m => m.type === 'AdPlay').length;
+    const totalRequestCount = metrics.filter(m => m.type === 'AdRequest').length;
     totalPlayCountElement.textContent = totalPlayCount;
     totalRequestCountElement.textContent = totalRequestCount;
+}
+
+function renderMetricsChart(metrics) {
+    if (!metrics || metrics.length === 0) {
+        metricsChartCanvas.getContext('2d').fillText("沒有足夠的數據來生成圖表。", 10, 50);
+        return;
+    }
+
+    // 按小時匯總數據
+    const hourlyData = metrics.reduce((acc, metric) => {
+        const hour = new Date(metric.timestamp).getHours();
+        const day = new Date(metric.timestamp).toLocaleDateString();
+        const key = `${day} ${hour}:00`;
+
+        if (!acc[key]) {
+            acc[key] = {
+                requests: 0,
+                plays: 0,
+                errors: 0,
+                exposureRate: 0
+            };
+        }
+
+        if (metric.type === 'AdRequest') acc[key].requests++;
+        if (metric.type === 'AdPlay') acc[key].plays++;
+        if (metric.type === 'AdError') acc[key].errors++;
+
+        return acc;
+    }, {});
+
+    // 計算每小時的曝光率
+    Object.keys(hourlyData).forEach(key => {
+        const data = hourlyData[key];
+        data.exposureRate = data.requests > 0 ? (data.plays / data.requests) * 100 : 0;
+    });
+
+    const labels = Object.keys(hourlyData).sort();
+    const requestData = labels.map(label => hourlyData[label].requests);
+    const playData = labels.map(label => hourlyData[label].plays);
+    const errorData = labels.map(label => hourlyData[label].errors);
+    const exposureRateData = labels.map(label => hourlyData[label].exposureRate);
+
+    new Chart(metricsChartCanvas, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '廣告請求 (AdRequest)',
+                    data: requestData,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                },
+                {
+                    label: '廣告播放 (AdPlay)',
+                    data: playData,
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                },
+                {
+                    label: '廣告錯誤 (AdError)',
+                    data: errorData,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                },
+                {
+                    label: '曝光率 (%)',
+                    data: exposureRateData,
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    fill: true,
+                    tension: 0.1,
+                    yAxisID: 'y1' // 使用新的 Y 軸
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: '每小時廣告事件趨勢與曝光率'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: '次數'
+                    }
+                },
+                y1: {
+                    beginAtZero: true,
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false, // 只繪製左側 Y 軸的網格線
+                    },
+                    title: {
+                        display: true,
+                        text: '曝光率 (%)'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderEndpointExposureRates(metrics) {
+    const endpointStats = {};
+
+    metrics.forEach(metric => {
+        if (metric.type === 'AdRequest' || metric.type === 'AdPlay') {
+            const endpointName = metric.endpoint || '未知';
+            if (!endpointStats[endpointName]) {
+                endpointStats[endpointName] = { requests: 0, plays: 0 };
+            }
+            if (metric.type === 'AdRequest') {
+                endpointStats[endpointName].requests++;
+            } else if (metric.type === 'AdPlay') {
+                endpointStats[endpointName].plays++;
+            }
+        }
+    });
+
+    let html = '<table class="table table-striped table-sm"><thead><tr><th>Endpoint</th><th>請求次數</th><th>播放次數</th><th>曝光率</th></tr></thead><tbody>';
+    for (const endpointName in endpointStats) {
+        const stats = endpointStats[endpointName];
+        const exposureRate = stats.requests > 0 ? ((stats.plays / stats.requests) * 100).toFixed(2) : 0;
+        html += `
+            <tr>
+                <td>${endpointName}</td>
+                <td>${stats.requests}</td>
+                <td>${stats.plays}</td>
+                <td>${exposureRate}%</td>
+            </tr>
+        `;
+    }
+    html += '</tbody></table>';
+    endpointExposureRatesDiv.innerHTML = html;
 }
 
 // 初始化管理面板

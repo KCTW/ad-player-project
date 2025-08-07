@@ -32,9 +32,18 @@
   color: #fff;
 }
 
-.notification.cache-info {
-  background-color: rgba(100, 149, 237, 0.6); /* 淺藍色背景 */
-  font-size: 14px; /* 較小的字體 */
+.notification.cache-hit {
+  background-color: rgba(40, 167, 69, 0.8); /* 鮮明的綠色，表示快取命中 */
+  color: #fff;
+  font-size: 16px; /* 稍微大一點的字體 */
+  font-weight: bold;
+}
+
+.notification.network-load {
+  background-color: rgba(255, 193, 7, 0.8); /* 鮮明的橘色，表示網路載入 */
+  color: #343a40; /* 深色文字，增加對比 */
+  font-size: 16px;
+  font-weight: bold;
 }
 
 #exposure-rate {
