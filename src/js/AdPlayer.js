@@ -474,7 +474,12 @@ class AdPlayer {
                     type = 'network-load';
                 }
 
-                this.showNotification(`影片 ${latestVideoResource.name.substring(latestVideoResource.name.lastIndexOf('/') + 1)} (類型: ${latestVideoResource.initiatorType}): ${cacheStatus}`, type);
+                // 嘗試從 VAST_ENDPOINTS 中找到對應的端點名稱
+                const videoBaseUrl = latestVideoResource.name.split('?')[0];
+                const matchedEndpoint = this.VAST_ENDPOINTS.find(ep => videoBaseUrl.startsWith(ep.url));
+                const endpointInfo = matchedEndpoint ? ` (端點: ${matchedEndpoint.name})` : '';
+
+                this.showNotification(`影片 ${latestVideoResource.name.substring(latestVideoResource.name.lastIndexOf('/') + 1)} (類型: ${latestVideoResource.initiatorType})${endpointInfo}: ${cacheStatus}`, type);
                 this.reportedVideoResources.add(resourceBaseName); // 記錄已報告的影片資源 (使用處理後的名稱)
 
             } else {

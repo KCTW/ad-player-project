@@ -62,11 +62,14 @@
 
         <!-- 趨勢圖 -->
         <div class="card mb-4">
-            <div class="card-header">播放趨勢圖</div>
+            <div class="card-header">播放趨勢圖 (總覽)</div>
             <div class="card-body">
-                <canvas id="metrics-chart"></canvas>
+                <canvas id="metrics-chart-overall"></canvas>
             </div>
         </div>
+
+        <!-- 各 Endpoint 趨勢圖容器 -->
+        <div id="endpoint-charts-container"></div>
 
         <!-- VAST Endpoint 管理 -->
         <div class="card mb-4">
