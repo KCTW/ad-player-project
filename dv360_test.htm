@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DV360 Direct Playback Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #video-container {
+            width: 640px;
+            height: 480px;
+            position: relative;
+            background-color: #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #ad-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #content-element {
+            width: 100%;
+            height: 100%;
+        }
+        #console {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+    </style>
+    <!--script type="text/javascript" src="//imasdk.googleapis.com/js/sdkloader/ima3.js"></script-->
+    <script type="text/javascript" src="//imasdk.googleapis.com/js/sdkloader/ima3_debug.js"></script>
+</head>
+<body>
+
+    <div id="video-container">
+        <video id="content-element" muted playsinline>
+            <!-- The main content video will play here after the ad. -->
+        </video>
+        <div id="ad-container"></div>
+    </div>
+
+    <div id="console">日誌:</div>
+
+    <script type="text/javascript">
+        const adContainer = document.getElementById('ad-container');
+        const contentElement = document.getElementById('content-element');
+        const consoleDiv = document.getElementById('console');
+        let adsLoader;
+        let adDisplayContainer;
+        let adsManager;
+
+        function log(message) {
+            console.log(message);
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(p);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function init() {
+            log("播放器初始化...");
+            adContainer.addEventListener('click', onAdContainerClick);
+
+            adDisplayContainer = new google.ima.AdDisplayContainer(adContainer, contentElement);
+            adsLoader = new google.ima.AdsLoader(adDisplayContainer);
+
+            adsLoader.addEventListener(
+                google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
+                onAdsManagerLoaded,
+                false);
+            adsLoader.addEventListener(
+                google.ima.AdErrorEvent.Type.AD_ERROR,
+                onAdError,
+                false);
+            log("準備就緒，請點擊影片以開始。");
+        }
+
+        function onAdContainerClick() {
+            log("偵測到點擊，正在初始化 AdDisplayContainer...");
+            // 移除監聽器，確保只初始化一次
+            adContainer.removeEventListener('click', onAdContainerClick);
+            // 根據 SDK 要求，必須先初始化 AdDisplayContainer
+            adDisplayContainer.initialize();
+            // 然後再請求廣告
+            requestAds();
+        }
+
+        function requestAds() {
+            log("請求廣告...");
+            contentElement.removeEventListener('play', requestAds); // 只觸發一次
+
+            // 建立廣告請求
+            const adsRequest = new google.ima.AdsRequest();
+            
+            // 手動附加一個受信任的 description_url，模擬 VSI 工具的行為
+            const encodedUrl = encodeURIComponent('https://www.google.com');
+            //adsRequest.adTagUrl = `https://ssp.tenmax.io/supply/outdoor/ad?device_id=4ae0f8bc725bb311&rmaxpublisher_id=89888e2d53&description_url=${encodedUrl}&correlator=${Date.now()}`;
+            adsRequest.adTagUrl = `https://ssp.tenmax.io/supply/outdoor/ad?device_id=4ae0f8bc725bb311&rmaxpublisher_id=89888e2d53`;
+
+            log('請求 URL: ' + adsRequest.adTagUrl);
+            adsLoader.requestAds(adsRequest);
+        }
+
+        function onAdsManagerLoaded(adsManagerLoadedEvent) {
+            log("AdsManager 已載入。");
+            adsManager = adsManagerLoadedEvent.getAdsManager(contentElement);
+
+            adsManager.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, onAdError);
+            adsManager.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, onAllAdsCompleted);
+            adsManager.addEventListener(google.ima.AdEvent.Type.STARTED, () => log("廣告開始播放。"));
+
+            try {
+                adDisplayContainer.initialize();
+                adsManager.init(640, 480, google.ima.ViewMode.NORMAL);
+                adsManager.start();
+            } catch (adError) {
+                log("AdsManager 啟動失敗: " + adError);
+                contentElement.play(); // 播放主要內容
+            }
+        }
+
+        function onAllAdsCompleted() {
+            log("所有廣告播放完畢。");
+            if (adsManager) {
+                adsManager.destroy();
+            }
+            // 播放主要內容
+            contentElement.play();
+        }
+
+        function onAdError(adErrorEvent) {
+            log("廣告錯誤: " + adErrorEvent.getError().toString());
+            if (adsManager) {
+                adsManager.destroy();
+            }
+            // 播放主要內容
+            contentElement.play();
+        }
+
+        // 頁面載入後，延遲 100ms 再初始化，確保 IMA SDK 完全準備就緒
+        window.addEventListener('load', () => {
+            setTimeout(init, 100);
+        });
+
+    </script>
+</body>
+</html>
