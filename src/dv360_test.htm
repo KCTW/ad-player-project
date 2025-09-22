@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>DV360 Direct Playback Test</title>
+    <title>DV360 Direct Playback Test (優化版)</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -29,6 +29,35 @@
         #content-element {
             width: 100%;
             height: 100%;
+            background-color: #000;
+        }
+        #play-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80px;
+            height: 80px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #play-button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 55%;
+            transform: translate(-50%, -50%);
+            width: 0;
+            height: 0;
+            border-top: 20px solid transparent;
+            border-bottom: 20px solid transparent;
+            border-left: 30px solid white;
+        }
+        #play-button.hidden {
+            display: none;
         }
         #console {
             position: fixed;
@@ -39,28 +68,38 @@
             padding: 10px;
             border-radius: 5px;
             font-family: monospace;
-            max-height: 150px;
+            width: calc(100% - 40px);
+            max-height: 200px;
             overflow-y: auto;
+            box-sizing: border-box;
+        }
+        #console p {
+            margin: 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #444;
         }
     </style>
-    <!--script type="text/javascript" src="//imasdk.googleapis.com/js/sdkloader/ima3.js"></script-->
     <script type="text/javascript" src="//imasdk.googleapis.com/js/sdkloader/ima3_debug.js"></script>
 </head>
 <body>
-
     <div id="video-container">
-        <video id="content-element" muted playsinline>
-            <!-- The main content video will play here after the ad. -->
-        </video>
+        <video id="content-element" playsinline>
+            </video>
         <div id="ad-container"></div>
+        <div id="play-button"></div>
     </div>
 
-    <div id="console">日誌:</div>
+    <div id="console">
+        <p><strong>日誌:</strong></p>
+    </div>
 
     <script type="text/javascript">
+        const videoContainer = document.getElementById('video-container');
         const adContainer = document.getElementById('ad-container');
         const contentElement = document.getElementById('content-element');
+        const playButton = document.getElementById('play-button');
         const consoleDiv = document.getElementById('console');
+
         let adsLoader;
         let adDisplayContainer;
         let adsManager;
@@ -68,96 +107,118 @@
         function log(message) {
             console.log(message);
             const p = document.createElement('p');
-            p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            p.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
             consoleDiv.appendChild(p);
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
 
         function init() {
             log("播放器初始化...");
-            adContainer.addEventListener('click', onAdContainerClick);
-
+            
+            // 建立 IMA 元件
             adDisplayContainer = new google.ima.AdDisplayContainer(adContainer, contentElement);
             adsLoader = new google.ima.AdsLoader(adDisplayContainer);
 
+            // 設定 AdsLoader 的監聽器
             adsLoader.addEventListener(
                 google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
                 onAdsManagerLoaded,
                 false);
             adsLoader.addEventListener(
                 google.ima.AdErrorEvent.Type.AD_ERROR,
-                onAdError,
+                onAdLoaderError,
                 false);
-            log("準備就緒，請點擊影片以開始。");
+
+            // 設定播放按鈕的點擊事件
+            playButton.addEventListener('click', playAds);
+
+            log("準備就緒，請點擊播放按鈕以開始。");
         }
 
-        function onAdContainerClick() {
-            log("偵測到點擊，正在初始化 AdDisplayContainer...");
-            // 移除監聽器，確保只初始化一次
-            adContainer.removeEventListener('click', onAdContainerClick);
-            // 根據 SDK 要求，必須先初始化 AdDisplayContainer
+        function playAds() {
+            log("偵測到播放點擊...");
+            playButton.classList.add('hidden'); // 隱藏播放按鈕
+
+            // 根據 IMA SDK 要求，initialize() 必須由使用者操作觸發
+            log("初始化 AdDisplayContainer...");
             adDisplayContainer.initialize();
-            // 然後再請求廣告
+            
+            // 初始化後立即請求廣告
             requestAds();
         }
 
         function requestAds() {
             log("請求廣告...");
-            contentElement.removeEventListener('play', requestAds); // 只觸發一次
-
-            // 建立廣告請求
             const adsRequest = new google.ima.AdsRequest();
             
-            // 手動附加一個受信任的 description_url，模擬 VSI 工具的行為
-            const encodedUrl = encodeURIComponent('https://www.google.com');
-            //adsRequest.adTagUrl = `https://ssp.tenmax.io/supply/outdoor/ad?device_id=4ae0f8bc725bb311&rmaxpublisher_id=89888e2d53&description_url=${encodedUrl}&correlator=${Date.now()}`;
-            adsRequest.adTagUrl = `https://ssp.tenmax.io/supply/outdoor/ad?device_id=4ae0f8bc725bb311&rmaxpublisher_id=89888e2d53`;
+            // VAST 廣告代碼 URL
+            adsRequest.adTagUrl = `https://ssp.tenmax.io/supply/outdoor/ad?device_id=4ae0f8bc725bb311&rmaxpublisher_id=89888e2d53&correlator=${Date.now()}`;
+            // 注意：description_url 是一個強烈建議的參數，可以增加廣告填充率。如果您的 SSP 不需要，可以省略。
+            // adsRequest.adTagUrl += `&description_url=${encodeURIComponent('https://www.google.com')}`;
 
             log('請求 URL: ' + adsRequest.adTagUrl);
             adsLoader.requestAds(adsRequest);
         }
 
         function onAdsManagerLoaded(adsManagerLoadedEvent) {
-            log("AdsManager 已載入。");
+            log("<b>AdsManager 已載入。</b>");
             adsManager = adsManagerLoadedEvent.getAdsManager(contentElement);
 
-            adsManager.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, onAdError);
-            adsManager.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, onAllAdsCompleted);
-            adsManager.addEventListener(google.ima.AdEvent.Type.STARTED, () => log("廣告開始播放。"));
+            // 註冊所有重要的廣告事件監聽器，以利偵錯
+            const adEvents = google.ima.AdEvent.Type;
+            for (const event in adEvents) {
+                adsManager.addEventListener(adEvents[event], onAdEvent);
+            }
 
             try {
-                adDisplayContainer.initialize();
-                adsManager.init(640, 480, google.ima.ViewMode.NORMAL);
+                // 動態獲取影片容器尺寸
+                const width = videoContainer.clientWidth;
+                const height = videoContainer.clientHeight;
+                log(`AdsManager.init() 尺寸: ${width}x${height}`);
+                adsManager.init(width, height, google.ima.ViewMode.NORMAL);
                 adsManager.start();
             } catch (adError) {
                 log("AdsManager 啟動失敗: " + adError);
-                contentElement.play(); // 播放主要內容
+                playMainContent();
             }
         }
 
-        function onAllAdsCompleted() {
-            log("所有廣告播放完畢。");
+        // 統一的廣告事件處理器
+        function onAdEvent(adEvent) {
+            const ad = adEvent.getAd();
+            const eventType = adEvent.type;
+            log(`廣告事件: <strong>${eventType}</strong>` + (ad ? ` (Ad ID: ${ad.getAdId()})` : ''));
+            
+            // 可以在此處針對特定事件做處理，例如：
+            if (eventType === google.ima.AdEvent.Type.ALL_ADS_COMPLETED) {
+                cleanUp();
+                playMainContent();
+            }
+        }
+        
+        // AdsLoader 錯誤處理
+        function onAdLoaderError(adErrorEvent) {
+            log(`廣告載入錯誤 (AdsLoader): <span style="color:red;">${adErrorEvent.getError().toString()}</span>`);
+            console.error('Ad Loader Error:', adErrorEvent.getError());
+            cleanUp();
+            playMainContent();
+        }
+
+        function cleanUp() {
             if (adsManager) {
+                log("銷毀 AdsManager...");
                 adsManager.destroy();
+                adsManager = null;
             }
-            // 播放主要內容
-            contentElement.play();
         }
 
-        function onAdError(adErrorEvent) {
-            log("廣告錯誤: " + adErrorEvent.getError().toString());
-            if (adsManager) {
-                adsManager.destroy();
-            }
-            // 播放主要內容
-            contentElement.play();
+        function playMainContent() {
+            log("所有廣告流程結束，準備播放主要內容 (此範例中為空白)。");
+            // contentElement.src = 'your-content-video.mp4';
+            // contentElement.play();
         }
 
-        // 頁面載入後，延遲 100ms 再初始化，確保 IMA SDK 完全準備就緒
-        window.addEventListener('load', () => {
-            setTimeout(init, 100);
-        });
-
+        window.addEventListener('load', init);
     </script>
 </body>
 </html>
