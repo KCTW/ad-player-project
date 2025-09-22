@@ -10,3 +10,7 @@ debug_player.js
 
 # Log files
 *.log
+/src/config/device_ids.js
+
+cert.pem
+key.pem
