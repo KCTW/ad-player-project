@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>DV360 Direct Playback Test (優化版)</title>
     <style>
         body {
@@ -150,6 +151,7 @@
         function requestAds() {
             log("請求廣告...");
             const adsRequest = new google.ima.AdsRequest();
+            adsRequest.pageUrl = 'https://www.pic.net.tw/';
             
             // VAST 廣告代碼 URL
             adsRequest.adTagUrl = `https://ssp.tenmax.io/supply/outdoor/ad?device_id=4ae0f8bc725bb311&rmaxpublisher_id=89888e2d53&correlator=${Date.now()}`;
